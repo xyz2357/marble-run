@@ -1,13 +1,22 @@
 import RAPIER from '@dimforge/rapier3d-compat';
+import { Editor } from './editor/editor';
 import { Game } from './game/game';
 import { installTestSeam } from './test-seam';
+import { createPanel } from './ui/panel';
 
 async function boot(): Promise<void> {
   await RAPIER.init();
   const container = document.getElementById('app');
   if (!container) throw new Error('#app not found');
   const game = new Game(container);
-  installTestSeam(game);
+  const editor = new Editor(game);
+  createPanel(editor, game);
+
+  if (!editor.loadAutosave()) editor.loadDemo();
+  game.frameTrack();
+  editor.setMode('edit');
+
+  installTestSeam(game, editor);
   game.start();
 }
 

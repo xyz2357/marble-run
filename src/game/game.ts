@@ -4,7 +4,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicsWorld } from '../physics/world';
 import { spawnMarble, removeMarble, type Marble } from './marble';
 import { Track } from './track';
-import { buildDemoTrack } from './demo';
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -16,6 +15,10 @@ export class Game {
   readonly track: Track;
   /** Marble ids that have reached a goal, in order. */
   readonly finished: number[] = [];
+  /** Extra status text appended to the HUD (set by the editor). */
+  hudExtra = '';
+  /** Called once per frame before rendering (the editor hooks in here). */
+  beforeRender: (() => void) | null = null;
   private paused = false;
   private lastTime = performance.now();
   private hud: HTMLElement | null;
@@ -37,6 +40,7 @@ export class Game {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.set(0, 1, 0);
     this.controls.enableDamping = true;
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
 
     this.scene.background = new THREE.Color(0x9fc5e8);
     this.scene.fog = new THREE.Fog(0x9fc5e8, 40, 120);
@@ -47,12 +51,8 @@ export class Game {
     this.setupLights();
     this.setupGround();
     this.track = new Track(this.physics, this.scene);
-    buildDemoTrack(this.track);
-    this.frameTrack();
-    this.spawnAtStart();
 
     window.addEventListener('resize', () => this.onResize());
-    window.addEventListener('keydown', (e) => this.onKey(e));
   }
 
   private setupLights(): void {
@@ -82,20 +82,26 @@ export class Game {
     const gBody = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.1, 0));
     this.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(40, 0.1, 40).setFriction(0.8), gBody);
 
+    // Grid lines on cell boundaries (cells are centered on integer coordinates).
     const grid = new THREE.GridHelper(80, 80, 0x99a08a, 0xb5bca8);
-    grid.position.y = 0.01;
+    grid.position.set(0.5, 0.01, 0.5);
     this.scene.add(grid);
   }
 
   /** Point the camera at the bounding box of the current track. */
   frameTrack(): void {
     const box = new THREE.Box3().setFromObject(this.track.root);
-    if (box.isEmpty()) return;
+    if (box.isEmpty()) {
+      this.controls.target.set(0, 1, 0);
+      this.camera.position.set(6, 6, 9);
+      this.controls.update();
+      return;
+    }
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const radius = Math.max(size.x, size.y, size.z) * 0.5;
+    const radius = Math.max(size.x, size.y, size.z, 4) * 0.5;
     this.controls.target.copy(center);
-    const dist = radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2)) * 0.9;
+    const dist = (radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2))) * 0.9;
     this.camera.position.copy(center).add(new THREE.Vector3(0.7, 0.6, 1).normalize().multiplyScalar(dist));
     this.controls.update();
   }
@@ -116,6 +122,7 @@ export class Game {
   clearMarbles(): void {
     for (const m of this.marbles) removeMarble(this.physics, this.scene, m);
     this.marbles.length = 0;
+    this.finished.length = 0;
   }
 
   setPaused(p: boolean): void {
@@ -123,18 +130,12 @@ export class Game {
     this.lastTime = performance.now();
   }
 
-  setDebug(on: boolean): void {
-    this.physics.setDebug(this.scene, on);
+  get isPaused(): boolean {
+    return this.paused;
   }
 
-  private onKey(e: KeyboardEvent): void {
-    if (e.key === 'd' || e.key === 'D') this.setDebug(!this.physics.debugEnabled);
-    if (e.key === ' ') this.spawnAtStart();
-    if (e.key === 'r' || e.key === 'R') {
-      this.clearMarbles();
-      this.finished.length = 0;
-    }
-    if (e.key === 'p' || e.key === 'P') this.setPaused(!this.paused);
+  setDebug(on: boolean): void {
+    this.physics.setDebug(this.scene, on);
   }
 
   /** Mark marbles inside any goal box as finished (once). Also cull marbles that fell off the world. */
@@ -175,6 +176,7 @@ export class Game {
     this.checkGoals();
     this.physics.updateDebug();
     this.controls.update();
+    this.beforeRender?.();
     this.renderer.render(this.scene, this.camera);
 
     this.frames++;
@@ -186,8 +188,8 @@ export class Game {
     }
     if (this.hud) {
       this.hud.textContent =
-        `FPS ${this.fps}  marbles ${this.marbles.length}  steps ${this.physics.stepCount}` +
-        `\n[Space] 放弹珠  [R] 清空  [D] 物理线框  [P] 暂停${this.paused ? ' (已暂停)' : ''}`;
+        `FPS ${this.fps}  弹珠 ${this.marbles.length}  到达 ${this.finished.length}  零件 ${this.track.pieces.length}` +
+        (this.hudExtra ? `\n${this.hudExtra}` : '');
     }
   }
 }

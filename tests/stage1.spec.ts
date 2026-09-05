@@ -15,6 +15,7 @@ type Seam = {
   setDebug: (on: boolean) => void;
   frameTrack: () => void;
   lookAt: (x: number, y: number, z: number, dist: number) => void;
+  setMode: (m: 'edit' | 'play') => void;
 };
 declare global {
   interface Window {
@@ -30,6 +31,11 @@ async function waitReady(page: Page) {
   });
   await page.goto('/');
   await page.waitForFunction(() => window.__TEST__?.ready === true, null, { timeout: 30_000 });
+  // Fresh context => no autosave => demo track loaded in edit mode. Switch to play (spawns a marble) and pause.
+  await page.evaluate(() => {
+    window.__TEST__.setMode('play');
+    window.__TEST__.pause();
+  });
   return errors;
 }
 

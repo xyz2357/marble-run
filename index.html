@@ -5,15 +5,52 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Marble Run</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d22; font-family: system-ui, sans-serif; }
+    :root {
+      --panel: rgba(30, 32, 38, 0.82);
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --text: #e8e6e1;
+      --muted: #a8a49c;
+      --accent: #f2b544;
+      --accent-text: #2a2418;
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d22;
+                 font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--text); }
     #app { position: fixed; inset: 0; }
     canvas { display: block; }
-    #hud { position: fixed; top: 8px; left: 8px; color: #ddd; font-size: 12px; line-height: 1.5;
-           background: rgba(0,0,0,.4); padding: 6px 10px; border-radius: 6px; pointer-events: none; white-space: pre; }
+    button { font: inherit; }
+
+    #hud { position: fixed; left: 12px; bottom: 12px; color: var(--text); font-size: 12px; line-height: 1.6;
+           background: var(--panel); border: 1px solid var(--panel-border); padding: 8px 12px; border-radius: 8px;
+           pointer-events: none; white-space: pre; backdrop-filter: blur(6px); }
+
+    #toolbar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px;
+               background: var(--panel); border: 1px solid var(--panel-border); padding: 6px 8px; border-radius: 10px;
+               backdrop-filter: blur(6px); }
+    #toolbar .group { display: flex; align-items: center; gap: 4px; padding: 0 6px; border-right: 1px solid var(--panel-border); }
+    #toolbar .group:last-child { border-right: none; }
+    #toolbar button { background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 6px;
+                      padding: 5px 10px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+    #toolbar button:hover { background: rgba(255,255,255,0.08); }
+    #toolbar button:disabled { color: var(--muted); opacity: 0.5; cursor: default; background: transparent; }
+    #toolbar button.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+    #toolbar button.danger:hover { background: rgba(224, 87, 79, 0.35); }
+    #toolbar .label { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-size: 13px; }
+
+    #palette { position: fixed; top: 64px; left: 12px; bottom: 96px; width: 104px; overflow-y: auto; display: flex;
+               flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--panel-border);
+               border-radius: 10px; backdrop-filter: blur(6px); scrollbar-width: thin; }
+    #palette.disabled { opacity: 0.4; pointer-events: none; }
+    #palette .piece { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px;
+                      background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid transparent; border-radius: 8px;
+                      cursor: pointer; font-size: 12px; }
+    #palette .piece:hover { background: rgba(255,255,255,0.1); }
+    #palette .piece.active { border-color: var(--accent); background: rgba(242, 181, 68, 0.18); }
+    #palette .piece canvas { width: 72px; height: 72px; border-radius: 6px; background: rgba(159, 197, 232, 0.35); }
   </style>
 </head>
 <body>
   <div id="app"></div>
+  <div id="ui"></div>
   <div id="hud"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>

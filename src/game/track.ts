@@ -13,6 +13,7 @@ import {
   type MaterialKey,
   type PieceDef,
   type PlacedPiece,
+  type PortKind,
   type WorldPort,
 } from '../pieces/types';
 import type { PhysicsWorld } from '../physics/world';
@@ -80,6 +81,7 @@ export class Track {
     }
 
     const inst: TrackPieceInstance = { id: this.nextId++, placed, def, group, body };
+    group.userData.instId = inst.id;
     if (built.spawn) inst.spawn = rotY(built.spawn, placed.rot).add(origin);
     if (built.goal) {
       const c = rotY(built.goal.center, placed.rot).add(origin);
@@ -118,13 +120,38 @@ export class Track {
     return this.pieces.flatMap((inst) => worldPorts(inst.def, inst.placed).map((port) => ({ inst, port })));
   }
 
-  /** Cells currently occupied at a given level range (approximate: any level). */
-  occupied(): Set<string> {
-    const s = new Set<string>();
+  /** Ports that are not connected to any other piece's port. */
+  openPorts(): { inst: TrackPieceInstance; port: WorldPort }[] {
+    const all = this.allPorts();
+    return all.filter(
+      (a) => !all.some((b) => b.inst !== a.inst && b.port.pos.distanceToSquared(a.port.pos) < 1e-4),
+    );
+  }
+
+  /** Every (cell, level) slot occupied by a piece: pieces span levels [level, level + heightUnits). */
+  occupiedMap(): Map<string, TrackPieceInstance> {
+    const m = new Map<string, TrackPieceInstance>();
     for (const inst of this.pieces) {
-      for (const c of placedCells(inst.def, inst.placed)) s.add(`${c.x},${c.z},${inst.placed.level}`);
+      for (const key of slotKeys(inst.def, inst.placed)) m.set(key, inst);
     }
-    return s;
+    return m;
+  }
+
+  /** True if the piece can be placed without overlapping existing pieces. */
+  canPlace(def: PieceDef, placed: PlacedPiece): boolean {
+    const occ = this.occupiedMap();
+    return slotKeys(def, placed).every((k) => !occ.has(k));
+  }
+
+  /** Find the piece instance a raycast hit belongs to. */
+  instanceFromObject(obj: THREE.Object3D | null): TrackPieceInstance | null {
+    let o: THREE.Object3D | null = obj;
+    while (o) {
+      const id = o.userData?.instId as number | undefined;
+      if (id !== undefined) return this.pieces.find((p) => p.id === id) ?? null;
+      o = o.parent;
+    }
+    return null;
   }
 
   toJSON(): PlacedPiece[] {
@@ -135,6 +162,53 @@ export class Track {
     this.clear();
     for (const p of data) this.place(p);
   }
+}
+
+function slotKeys(def: PieceDef, placed: PlacedPiece): string[] {
+  const keys: string[] = [];
+  const h = Math.max(1, def.heightUnits);
+  for (const c of placedCells(def, placed)) {
+    for (let lv = placed.level; lv < placed.level + h; lv++) keys.push(`${c.x},${c.z},${lv}`);
+  }
+  return keys;
+}
+
+function portKindsCompatible(target: PortKind, candidate: PortKind): boolean {
+  if (target === 'both' || candidate === 'both') return true;
+  return target !== candidate; // in <-> out
+}
+
+/**
+ * All placements of `def` that connect one of its ports to `target`
+ * (positions coincide, directions opposite, anchor on the grid).
+ */
+export function snapSolutions(def: PieceDef, target: WorldPort): PlacedPiece[] {
+  const wantDir = target.dir.clone().negate();
+  const out: PlacedPiece[] = [];
+  const seen = new Set<string>();
+  for (const p of def.ports) {
+    if (!portKindsCompatible(target.kind, p.kind)) continue;
+    for (let rot = 0; rot < 4; rot++) {
+      const d = rotY(p.dir, rot);
+      if (d.distanceToSquared(wantDir) > 1e-6) continue;
+      const anchor = target.pos.clone().sub(rotY(p.pos, rot));
+      const cx = anchor.x / CELL;
+      const cz = anchor.z / CELL;
+      const lv = anchor.y / H;
+      if (Math.abs(cx - Math.round(cx)) > 1e-4 || Math.abs(cz - Math.round(cz)) > 1e-4 || Math.abs(lv - Math.round(lv)) > 1e-4) continue;
+      const placed: PlacedPiece = {
+        def: def.id,
+        cell: { x: Math.round(cx), z: Math.round(cz) },
+        level: Math.round(lv),
+        rot: rot as 0 | 1 | 2 | 3,
+      };
+      const key = `${placed.cell.x},${placed.cell.z},${placed.level},${placed.rot}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(placed);
+    }
+  }
+  return out;
 }
 
 /**
