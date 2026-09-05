@@ -13,7 +13,8 @@ type Seam = {
   setToolMode: (m: 'chain' | 'free') => void;
   select: (id: string | null) => void;
   setLevel: (n: number) => void;
-  candidate: () => Candidate;
+  candidate: () => (Candidate & { closes: boolean }) | null;
+  importJSON: (t: string) => void;
   activePort: () => { x: number; y: number; z: number; kind: string } | null;
   clearTrack: () => void;
   pick: (i: number | null) => void;
@@ -148,4 +149,46 @@ test('camera: WASD pans, view presets and focus move the camera', async ({ page 
   expect(Math.abs(p.x - t.x)).toBeLessThan(0.05);
   expect(Math.abs(p.z - t.z)).toBeLessThan(0.05);
   expect(p.y).toBeGreaterThan(t.y + 3);
+});
+
+test('backward chaining from an entry port and gap closing', async ({ page }) => {
+  await openEmpty(page);
+  // Only an end piece: its entry is the sole open port, so chaining runs backwards from it.
+  await page.evaluate(() => window.__TEST__.importJSON(JSON.stringify({ version: 1, pieces: [{ def: 'end', cell: { x: 3, z: 0 }, level: 4, rot: 0 }] })));
+  expect((await page.evaluate(() => window.__TEST__.activePort()))?.kind).toBe('in');
+  await page.keyboard.press('2'); // straight attaches with its 'both' port
+  expect((await page.evaluate(() => window.__TEST__.candidate()))?.snapped).toBe(true);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('3'); // slope attaches with its exit; active moves to its entry
+  await page.keyboard.press('Enter');
+  expect((await page.evaluate(() => window.__TEST__.activePort()))?.kind).toBe('in');
+  await page.keyboard.press('1'); // start attaches with its exit
+  const c = await page.evaluate(() => window.__TEST__.candidate());
+  expect(c?.snapped).toBe(true);
+  await page.keyboard.press('Enter');
+  expect((await page.evaluate(() => window.__TEST__.pieces())).map((p) => p.def)).toEqual(['end', 'straight', 'slope', 'start']);
+  expect(await page.evaluate(() => window.__TEST__.openPortsScreen())).toHaveLength(0);
+
+  // Gap closing: start and end two cells apart; the second straight closes the gap.
+  await page.evaluate(() =>
+    window.__TEST__.importJSON(
+      JSON.stringify({
+        version: 1,
+        pieces: [
+          { def: 'start', cell: { x: 0, z: 0 }, level: 4, rot: 0 },
+          { def: 'end', cell: { x: 3, z: 0 }, level: 4, rot: 0 },
+        ],
+      }),
+    ),
+  );
+  expect((await page.evaluate(() => window.__TEST__.activePort()))?.kind).toBe('out');
+  await page.keyboard.press('2');
+  expect((await page.evaluate(() => window.__TEST__.candidate()))?.closes).toBe(false);
+  await page.keyboard.press('Enter');
+  const c2 = await page.evaluate(() => window.__TEST__.candidate());
+  expect(c2?.closes).toBe(true);
+  await page.screenshot({ path: 'test-results/stage2-closes.png' });
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.__TEST__.openPortsScreen())).toHaveLength(0);
+  expect(await page.evaluate(() => window.__TEST__.activePort())).toBeNull();
 });

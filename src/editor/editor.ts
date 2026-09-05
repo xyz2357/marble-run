@@ -27,6 +27,8 @@ export interface Candidate {
   snapped: boolean;
   /** Number of alternative snap solutions at this port (R cycles through them). */
   alternatives: number;
+  /** True when another port of the candidate also lands on an existing open port (a gap is closed). */
+  closes: boolean;
 }
 
 export interface SaveFile {
@@ -53,6 +55,8 @@ export class Editor {
   picked: TrackPieceInstance | null = null;
   /** Chain mode: the port the next piece attaches to. */
   activePort: WorldPort | null = null;
+  /** Chain mode: are we extending forwards (from exits) or backwards (from entries)? Kept across 'both' ports. */
+  chainDir: 'forward' | 'backward' = 'forward';
   /** Why there is no candidate (shown in the HUD). */
   candidateMessage = '';
   /** UI refresh callback. */
@@ -194,6 +198,8 @@ export class Editor {
   /** Make a port the chain-mode attachment point. */
   setActivePort(port: WorldPort | null): void {
     this.activePort = port ? { pos: port.pos.clone(), dir: port.dir.clone(), kind: port.kind } : null;
+    if (port?.kind === 'in') this.chainDir = 'backward';
+    else if (port?.kind === 'out') this.chainDir = 'forward';
     this.snapIndex = 0;
     this.changed();
   }
@@ -358,9 +364,13 @@ export class Editor {
    */
   private resolveActivePort(justPlaced: TrackPieceInstance | null): void {
     const open = this.game.track.openPorts();
+    // Building backwards (from entries) continues from the new piece's entry; forwards from its exit.
+    if (this.activePort?.kind === 'in') this.chainDir = 'backward';
+    else if (this.activePort?.kind === 'out') this.chainDir = 'forward';
+    const primary = this.chainDir === 'backward' ? 'in' : 'out';
     const exitOf = (inst: TrackPieceInstance): WorldPort | null => {
       const mine = open.filter((o) => o.inst === inst).map((o) => o.port);
-      return mine.find((p) => p.kind === 'out') ?? mine.find((p) => p.kind === 'both') ?? null;
+      return mine.find((p) => p.kind === primary) ?? mine.find((p) => p.kind === 'both') ?? null;
     };
     let next: WorldPort | null = null;
     if (justPlaced) next = exitOf(justPlaced);
@@ -369,11 +379,19 @@ export class Editor {
       if (same) next = same.port;
     }
     if (!next) {
+      // Continuity lost (new track, deleted piece): default to building forwards from the last exit.
+      this.chainDir = 'forward';
       const pieces = this.game.track.pieces;
-      for (let i = pieces.length - 1; i >= 0 && !next; i--) next = exitOf(pieces[i]);
+      const lastExit = (inst: TrackPieceInstance): WorldPort | null => {
+        const mine = open.filter((o) => o.inst === inst).map((o) => o.port);
+        return mine.find((p) => p.kind === 'out') ?? mine.find((p) => p.kind === 'both') ?? null;
+      };
+      for (let i = pieces.length - 1; i >= 0 && !next; i--) next = lastExit(pieces[i]);
     }
-    if (!next) next = open.find((o) => o.port.kind !== 'in')?.port ?? null;
+    if (!next) next = (open.find((o) => o.port.kind !== 'in') ?? open[0])?.port ?? null;
     this.activePort = next ? { pos: next.pos.clone(), dir: next.dir.clone(), kind: next.kind } : null;
+    if (next?.kind === 'in') this.chainDir = 'backward';
+    else if (next?.kind === 'out') this.chainDir = 'forward';
   }
 
   private refreshPortMarkers(): void {
@@ -658,16 +676,16 @@ export class Editor {
     if (this.toolMode === 'chain') {
       const state = !this.selectedDef
         ? this.activePort
-          ? '按数字键或点零件栏选零件，会接在橙色接口上'
+          ? `按数字键或点零件栏选零件，会接在橙色接口上${this.chainDir === 'backward' ? '（正在从入口倒着铺）' : ''}`
           : '轨道为空：选零件后点地面放第一块'
         : this.candidateMessage
           ? this.candidateMessage
           : this.candidate?.snapped
-            ? `接在橙色接口上${this.candidate.alternatives > 1 ? `（接法 ${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}，Enter/点击确认`
+            ? `${this.candidate.closes ? '两端都接上了！' : '接在橙色接口上'}${this.candidate.alternatives > 1 ? `（接法 ${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}，Enter/点击确认`
             : `自由放置：层 ${this.level}，点地面放置`;
       line1 = `接龙模式  ${tool}  ${state}`;
     } else {
-      const state = this.candidate ? (this.candidate.snapped ? `吸附${this.candidate.alternatives > 1 ? `（${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}` : `自由放置 层 ${this.level} 旋转 ${this.rot * 90}°`) : '';
+      const state = this.candidate ? (this.candidate.snapped ? `${this.candidate.closes ? '两端都接上了！' : '吸附'}${this.candidate.alternatives > 1 ? `（${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}` : `自由放置 层 ${this.level} 旋转 ${this.rot * 90}°`) : '';
       line1 = `自由模式  ${tool}  ${state}`;
     }
     const picked = this.picked ? `  已选中「${this.picked.def.name}」：R 旋转  Delete 删除${this.toolMode === 'free' ? '  Q/E 升降  方向键平移' : ''}` : '';
@@ -745,9 +763,11 @@ export class Editor {
     let placed: PlacedPiece | null = null;
     let snapped = false;
     let alternatives = 0;
+    let snapTarget: WorldPort | null = null;
 
     if (this.toolMode === 'chain' && this.activePort) {
-      const sols = snapSolutions(def, this.activePort);
+      snapTarget = this.activePort;
+      const sols = this.sortedSolutions(def, this.activePort);
       if (!sols.length) {
         this.candidateMessage = `「${def.name}」接不上这个接口（方向或高度不匹配）`;
         this.candidate = null;
@@ -766,11 +786,12 @@ export class Editor {
       if (this.toolMode === 'free') {
         const port = this.nearestOpenPort(SNAP_PX);
         if (port) {
-          const sols = snapSolutions(def, port);
+          const sols = this.sortedSolutions(def, port);
           if (sols.length) {
             alternatives = sols.length;
             placed = sols[this.snapIndex % sols.length];
             snapped = true;
+            snapTarget = port;
           }
         }
       }
@@ -798,11 +819,40 @@ export class Editor {
       }
     }
     const valid = this.game.track.canPlace(def, placed);
-    this.candidate = { placed, valid, snapped, alternatives };
+    const closes = this.closesGap(def, placed, snapTarget ?? undefined);
+    this.candidate = { placed, valid, snapped, alternatives, closes };
     this.ghost.setDef(def);
     this.ghost.setPlacement(placed);
-    this.ghost.setValid(valid);
+    this.ghost.setValid(valid, closes);
     this.ghost.show();
+  }
+
+  /**
+   * Snap solutions ordered by usefulness: ones that also close a gap first, then ones
+   * whose connecting port matches the chaining direction (forwards: the new piece's entry
+   * meets the target; backwards: its exit does), then definition order.
+   */
+  private sortedSolutions(def: PieceDef, target: WorldPort): PlacedPiece[] {
+    const sols = snapSolutions(def, target);
+    const wanted = this.chainDir === 'backward' ? 'out' : 'in';
+    const connectingKind = (p: PlacedPiece) => worldPorts(def, p).find((wp) => wp.pos.distanceToSquared(target.pos) < 1e-4)?.kind;
+    return sols
+      .map((p, i) => {
+        const k = connectingKind(p);
+        return { p, i, closes: this.closesGap(def, p, target), dirOk: k === wanted || k === 'both' };
+      })
+      .sort((a, b) => Number(b.closes) - Number(a.closes) || Number(b.dirOk) - Number(a.dirOk) || a.i - b.i)
+      .map((x) => x.p);
+  }
+
+  /** Does any port of the placed piece (other than the one on `except`) coincide with an existing open port? */
+  private closesGap(def: PieceDef, placed: PlacedPiece, except?: WorldPort): boolean {
+    const open = this.game.track.openPorts();
+    for (const p of worldPorts(def, placed)) {
+      if (except && p.pos.distanceToSquared(except.pos) < 1e-4) continue;
+      if (open.some((o) => o.port.pos.distanceToSquared(p.pos) < 1e-4 && o.port.dir.dot(p.dir) < -0.99)) return true;
+    }
+    return false;
   }
 
   /** World position -> CSS pixel position on the canvas. */

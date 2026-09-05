@@ -3,6 +3,7 @@ import { placedOrigin, placedQuat, type PieceDef, type PlacedPiece } from '../pi
 
 const VALID = 0x4ade80;
 const INVALID = 0xf87171;
+const CLOSES = 0x38bdf8;
 
 /** Translucent preview of the piece about to be placed. */
 export class Ghost {
@@ -41,8 +42,9 @@ export class Ghost {
     this.group.quaternion.copy(placedQuat(p));
   }
 
-  setValid(valid: boolean): void {
-    for (const m of this.materials) m.color.set(valid ? VALID : INVALID);
+  setValid(valid: boolean, closes = false): void {
+    const c = !valid ? INVALID : closes ? CLOSES : VALID;
+    for (const m of this.materials) m.color.set(c);
   }
 
   show(): void {
