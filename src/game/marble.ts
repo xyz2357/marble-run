@@ -64,8 +64,8 @@ export function spawnMarble(pw: PhysicsWorld, scene: THREE.Scene, pos: THREE.Vec
   const rbDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(pos.x, pos.y, pos.z)
     .setCcdEnabled(true)
-    .setLinearDamping(0.1)
-    .setAngularDamping(0.25);
+    .setLinearDamping(0.05)
+    .setAngularDamping(0.15);
   const body = pw.world.createRigidBody(rbDesc);
   const colDesc = RAPIER.ColliderDesc.ball(MARBLE_RADIUS).setRestitution(0.3).setFriction(0.6).setDensity(2.5);
   const collider = pw.world.createCollider(colDesc, body);

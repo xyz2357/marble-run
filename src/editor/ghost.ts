@@ -22,7 +22,7 @@ export class Ghost {
     this.defId = def.id;
     this.disposeChildren();
     const built = def.build();
-    for (const part of built.parts) {
+    for (const part of [...built.parts, ...(built.preview ?? [])]) {
       const mat = new THREE.MeshStandardMaterial({
         color: VALID,
         transparent: true,

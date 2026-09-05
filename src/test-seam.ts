@@ -26,9 +26,29 @@ export function installTestSeam(game: Game, editor: Editor): void {
         return { id: m.id, x: t.x, y: t.y, z: t.z, vx: v.x, vy: v.y, vz: v.z };
       }),
     finished: () => [...game.finished],
+    /** Contact normals / points for one marble (debugging geometry). */
+    contacts: (id: number) => {
+      const m = game.marbles.find((mm) => mm.id === id);
+      if (!m) return [];
+      const out: { nx: number; ny: number; nz: number; n: number; px: number; py: number; pz: number }[] = [];
+      game.physics.world.contactPairsWith(m.collider, (other) => {
+        game.physics.world.contactPair(m.collider, other, (manifold, flipped) => {
+          if (manifold.numContacts() === 0) return;
+          const nrm = manifold.normal();
+          const sgn = flipped ? -1 : 1;
+          // Contact point expressed in the OTHER collider's frame, mapped to world space.
+          const lp = flipped ? manifold.localContactPoint1(0) : manifold.localContactPoint2(0);
+          const ot = other.translation();
+          const orr = other.rotation();
+          const w = new THREE.Vector3(lp?.x ?? 0, lp?.y ?? 0, lp?.z ?? 0).applyQuaternion(new THREE.Quaternion(orr.x, orr.y, orr.z, orr.w)).add(new THREE.Vector3(ot.x, ot.y, ot.z));
+          out.push({ nx: nrm.x * sgn, ny: nrm.y * sgn, nz: nrm.z * sgn, n: manifold.numContacts(), px: w.x, py: w.y, pz: w.z });
+        });
+      });
+      return out;
+    },
     results: () => game.results.map((r) => ({ ...r })),
     simTime: () => game.simTime,
-    spawnBurst: (n: number) => game.spawnBurst(n),
+    spawnBurst: (n: number, interval?: number) => game.spawnBurst(n, interval),
     setAutoSpawn: (on: boolean) => game.setAutoSpawn(on),
     setTimeScale: (s: number) => game.setTimeScale(s),
     timeScale: () => game.timeScale,
@@ -107,6 +127,12 @@ export function installTestSeam(game: Game, editor: Editor): void {
     },
     loadDemo: () => editor.loadDemo(),
     frameTrack: () => game.frameTrack(),
+    /** Orthographic-like top view over a point (debugging geometry). */
+    topView: (x: number, z: number, height: number) => {
+      game.controls.target.set(x, 0, z);
+      game.camera.position.set(x, height, z + 0.001);
+      game.controls.update();
+    },
     lookAt: (x: number, y: number, z: number, dist: number) => {
       game.controls.target.set(x, y, z);
       game.camera.position.set(x + dist * 0.7, y + dist * 0.6, z + dist);

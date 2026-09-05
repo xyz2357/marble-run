@@ -29,12 +29,41 @@ export interface MeshPart {
   collide?: boolean;
 }
 
+/** What a mechanism factory gets to work with. */
+export interface MechanismContext {
+  world: import('@dimforge/rapier3d-compat').World;
+  /** Piece origin / rotation in world space. */
+  origin: THREE.Vector3;
+  quat: THREE.Quaternion;
+  /** Scene group to add world-space meshes to. */
+  root: THREE.Object3D;
+  /** Register a body whose mesh must follow it. */
+  bind: (body: import('@dimforge/rapier3d-compat').RigidBody, mesh: THREE.Object3D) => void;
+  unbind: (body: import('@dimforge/rapier3d-compat').RigidBody) => void;
+}
+
+export interface MarbleInfo {
+  id: number;
+  pos: THREE.Vector3;
+}
+
+/** A moving part of a piece: kinematic / dynamic bodies plus per-step logic. */
+export interface Mechanism {
+  /** Called before every physics step. */
+  update(dt: number, marbles: MarbleInfo[]): void;
+  dispose(): void;
+}
+
 export interface BuiltPiece {
   parts: MeshPart[];
+  /** Visual-only parts shown in previews (ghost / thumbnails) for moving pieces. */
+  preview?: MeshPart[];
   /** Local marble spawn point (start pieces). */
   spawn?: THREE.Vector3;
   /** Local AABB that counts as "finished" (end pieces). */
   goal?: { center: THREE.Vector3; half: THREE.Vector3 };
+  /** Factories for moving parts, created when the piece is placed. */
+  mechanisms?: ((ctx: MechanismContext) => Mechanism)[];
 }
 
 export interface PieceDef {

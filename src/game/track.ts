@@ -10,7 +10,9 @@ import {
   placedQuat,
   rotY,
   worldPorts,
+  type MarbleInfo,
   type MaterialKey,
+  type Mechanism,
   type PieceDef,
   type PlacedPiece,
   type PortKind,
@@ -28,6 +30,7 @@ export interface TrackPieceInstance {
   spawn?: THREE.Vector3;
   /** World-space goal box, if any. */
   goal?: THREE.Box3;
+  mechanisms: Mechanism[];
 }
 
 export const MATERIALS: Record<MaterialKey, THREE.Material> = {
@@ -74,14 +77,25 @@ export class Track {
       if (part.collide === false) continue;
       const { vertices, indices } = trimeshArrays(part.geometry);
       const desc = RAPIER.ColliderDesc.trimesh(vertices, indices, RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES)
-        .setFriction(0.5)
+        .setFriction(0.35)
         .setRestitution(0.1)
         .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Min);
       this.physics.world.createCollider(desc, body);
     }
 
-    const inst: TrackPieceInstance = { id: this.nextId++, placed, def, group, body };
+    const inst: TrackPieceInstance = { id: this.nextId++, placed, def, group, body, mechanisms: [] };
     group.userData.instId = inst.id;
+    if (built.mechanisms) {
+      const ctx = {
+        world: this.physics.world,
+        origin,
+        quat,
+        root: this.root,
+        bind: (b: RAPIER.RigidBody, m: THREE.Object3D) => this.physics.bind(b, m),
+        unbind: (b: RAPIER.RigidBody) => this.physics.unbind(b),
+      };
+      for (const make of built.mechanisms) inst.mechanisms.push(make(ctx));
+    }
     if (built.spawn) inst.spawn = rotY(built.spawn, placed.rot).add(origin);
     if (built.goal) {
       const c = rotY(built.goal.center, placed.rot).add(origin);
@@ -97,6 +111,7 @@ export class Track {
     const i = this.pieces.indexOf(inst);
     if (i < 0) return;
     this.pieces.splice(i, 1);
+    for (const m of inst.mechanisms) m.dispose();
     this.root.remove(inst.group);
     inst.group.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
@@ -106,6 +121,11 @@ export class Track {
 
   clear(): void {
     for (const p of [...this.pieces]) this.remove(p);
+  }
+
+  /** Advance all mechanisms (call before each physics step). */
+  update(dt: number, marbles: MarbleInfo[]): void {
+    for (const inst of this.pieces) for (const m of inst.mechanisms) m.update(dt, marbles);
   }
 
   spawnPoints(): THREE.Vector3[] {

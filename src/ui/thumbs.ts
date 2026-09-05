@@ -20,7 +20,8 @@ export function renderThumbnails(defs: PieceDef[], size: number): Map<string, HT
   for (const def of defs) {
     const group = new THREE.Group();
     const built = def.build();
-    for (const part of built.parts) group.add(new THREE.Mesh(part.geometry, MATERIALS[part.material]));
+    const parts = [...built.parts, ...(built.preview ?? [])];
+    for (const part of parts) group.add(new THREE.Mesh(part.geometry, MATERIALS[part.material]));
     scene.add(group);
 
     const box = new THREE.Box3().setFromObject(group);
@@ -38,7 +39,7 @@ export function renderThumbnails(defs: PieceDef[], size: number): Map<string, HT
     out.set(def.id, canvas);
 
     scene.remove(group);
-    for (const part of built.parts) part.geometry.dispose();
+    for (const part of parts) part.geometry.dispose();
   }
 
   renderer.dispose();

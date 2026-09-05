@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { slopePath, sweep } from '../geometry/sweep';
+import { boxGeo, mergeGeometries, slopePath, sweep } from '../geometry/sweep';
 import { H, v3, type PieceDef } from './types';
 
 /**
@@ -31,7 +31,7 @@ export const funnelDef: PieceDef = {
     const filletDrop = filletR * (1 - Math.cos(phiMax));
     const coneStartR = rimR - filletExtent;
     const chuteTopY = chuteY + 0.3; // landing zone under the tube, slopes down to the exit
-    const tubeBottom = chuteTopY + 0.25; // just above the chute rails (rail top = chuteTopY + 0.2)
+    const tubeBottom = chuteTopY + 0.5; // a full marble diameter above the chute deck, so nothing wedges under the rim
 
     /** Bowl surface height at radius r: 0 at the rim, convex fillet, then cone down to the hole. */
     const bowlY = (r: number): number => {
@@ -74,6 +74,18 @@ export const funnelDef: PieceDef = {
     // so marbles that drop in vertically start rolling towards the exit.
     const chute = sweep(slopePath(v3(-0.6, chuteTopY, 0), v3(1.5, chuteY, 0)), 20);
 
+    // Landing box under the tube: walls up to the tube bottom (back + both sides, open towards the exit),
+    // so marbles bouncing off each other cannot escape between the rails and the tube rim.
+    const wallTop = tubeBottom + 0.02;
+    const wallBottom = chuteTopY - 0.08;
+    const wallMid = (wallTop + wallBottom) / 2;
+    const wallHalf = (wallTop - wallBottom) / 2;
+    const landingBox = mergeGeometries([
+      boxGeo(v3(-0.63, wallMid, 0), v3(0.03, wallHalf, 0.42)),
+      boxGeo(v3(-0.05, wallMid, 0.39), v3(0.55, wallHalf, 0.03)),
+      boxGeo(v3(-0.05, wallMid, -0.39), v3(0.55, wallHalf, 0.03)),
+    ]);
+
     // Four little legs so it doesn't float visually (no collider).
     const legGeos: THREE.BufferGeometry[] = [];
     for (const [sx, sz] of [
@@ -91,6 +103,7 @@ export const funnelDef: PieceDef = {
       parts: [
         { geometry: bowl, material: 'wood' },
         { geometry: chute, material: 'wood' },
+        { geometry: landingBox, material: 'dark' },
         ...legGeos.map((geometry) => ({ geometry, material: 'dark' as const, collide: false })),
       ],
     };

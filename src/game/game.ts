@@ -5,6 +5,7 @@ import { FIXED_DT, PhysicsWorld } from '../physics/world';
 import { AudioEngine, type MarbleAudioState } from './audio';
 import { spawnMarble, removeMarble, type Marble } from './marble';
 import { Track } from './track';
+import type { MarbleInfo } from '../pieces/types';
 
 export const MARBLE_COLORS = [0x3aa0ff, 0xff5a5a, 0x5ad46a, 0xffc93a, 0xc36bff, 0xff8a3a, 0x2dd4bf, 0xf472b6];
 const MAX_MARBLES = 60;
@@ -191,8 +192,8 @@ export class Game {
   }
 
   /** Queue n marbles per start piece, released one after another. */
-  spawnBurst(n: number): void {
-    for (let i = 0; i < n; i++) this.spawnQueue.push(this.simTime + i * BURST_INTERVAL);
+  spawnBurst(n: number, interval = BURST_INTERVAL): void {
+    for (let i = 0; i < n; i++) this.spawnQueue.push(this.simTime + i * interval);
   }
 
   setAutoSpawn(on: boolean): void {
@@ -244,7 +245,17 @@ export class Game {
   /** Advance the simulation by n fixed steps: physics, spawn queue, goals. */
   step(n: number): void {
     const v = this.tmpV;
+    let infos: MarbleInfo[] = [];
     for (let i = 0; i < n; i++) {
+      // Marbles can be spawned/removed mid-run, so rebuild the info list when the set changes.
+      if (infos.length !== this.marbles.length || infos.some((info, k) => info.id !== this.marbles[k].id)) {
+        infos = this.marbles.map((m) => ({ id: m.id, pos: new THREE.Vector3() }));
+      }
+      for (let k = 0; k < this.marbles.length; k++) {
+        const t = this.marbles[k].body.translation();
+        infos[k].pos.set(t.x, t.y, t.z);
+      }
+      this.track.update(FIXED_DT, infos);
       this.physics.stepOnce();
       this.simTime += FIXED_DT;
       // Per-step velocity change: gravity contributes ~0.08 m/s per step, a real hit much more.
