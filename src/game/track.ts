@@ -74,7 +74,8 @@ export class Track {
       const { vertices, indices } = trimeshArrays(part.geometry);
       const desc = RAPIER.ColliderDesc.trimesh(vertices, indices, RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES)
         .setFriction(0.5)
-        .setRestitution(0.2);
+        .setRestitution(0.1)
+        .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Min);
       this.physics.world.createCollider(desc, body);
     }
 

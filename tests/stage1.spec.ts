@@ -90,3 +90,46 @@ test('marble runs the whole demo track and reaches the goal', async ({ page }) =
   await page.evaluate(() => window.__TEST__.frameTrack());
   await page.screenshot({ path: 'test-results/stage1-finished.png' });
 });
+
+test('funnel: marble stays on the bowl surface and drops through the hole without bouncing', async ({ page }) => {
+  await waitReady(page);
+  await page.evaluate(() => window.__TEST__.pause());
+  const funnel = (await page.evaluate(() => window.__TEST__.pieces())).find((p) => p.def === 'funnel')!;
+  const cx = funnel.cell.x;
+  const cz = funnel.cell.z;
+  const cy = funnel.level * 0.5;
+
+  // Run until the marble enters the funnel footprint at rim level, then sample every 4 steps.
+  let inFunnel = false;
+  let maxUpwardVy = 0;
+  let minHeightOverSurface = Infinity;
+  let dropped = false;
+  for (let step = 0; step < 120 * 30 && !dropped; step += 4) {
+    await page.evaluate(() => window.__TEST__.stepN(4));
+    const m = (await page.evaluate(() => window.__TEST__.marbles()))[0];
+    const r = Math.hypot(m.x - cx, m.z - cz);
+    const y = m.y - cy;
+    if (!inFunnel && r < 1.5 && Math.abs(y) < 0.3) inFunnel = true;
+    if (!inFunnel) continue;
+    if (y < -0.5) {
+      dropped = true; // fell through the hole into the tube
+      break;
+    }
+    // Same profile as src/pieces/funnel.ts: rim fillet (R=1.4) into a 31deg cone.
+    const filletR = 1.4;
+    const slope = 0.6;
+    const phiMax = Math.atan(slope);
+    const coneStart = 1.5 - filletR * Math.sin(phiMax);
+    const filletDrop = filletR * (1 - Math.cos(phiMax));
+    const rr = Math.max(r, 0.4);
+    const surface = rr >= coneStart ? -filletR * (1 - Math.sqrt(1 - ((1.5 - rr) / filletR) ** 2)) : -filletDrop - slope * (coneStart - rr);
+    if (r > 0.55) minHeightOverSurface = Math.min(minHeightOverSurface, y - surface);
+    if (r < 1.3) maxUpwardVy = Math.max(maxUpwardVy, m.vy);
+  }
+  expect(inFunnel).toBe(true);
+  expect(dropped).toBe(true);
+  // Marble center must stay above the visual surface (radius 0.15 minus some slack for the faceted mesh).
+  expect(minHeightOverSurface).toBeGreaterThan(0.08);
+  // No bounce inside the bowl.
+  expect(maxUpwardVy).toBeLessThan(0.3);
+});

@@ -18,7 +18,12 @@ export interface PortDef {
 export type MaterialKey = 'wood' | 'dark' | 'accent' | 'goal';
 
 export interface MeshPart {
-  geometry: THREE.BufferGeometry; // indexed
+  /**
+   * Indexed geometry with OUTWARD-facing triangle winding. The same mesh is used as a Rapier
+   * trimesh collider with FIX_INTERNAL_EDGES, which is orientation sensitive: a marble touching
+   * a back face can pass straight through it (see the funnel lathe profile for an example).
+   */
+  geometry: THREE.BufferGeometry;
   material: MaterialKey;
   /** false => visual only, no collider */
   collide?: boolean;
