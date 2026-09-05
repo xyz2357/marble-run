@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicsWorld } from '../physics/world';
 import { spawnMarble, removeMarble, type Marble } from './marble';
+import { Track } from './track';
+import { buildDemoTrack } from './demo';
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -11,6 +13,9 @@ export class Game {
   readonly controls: OrbitControls;
   readonly physics: PhysicsWorld;
   readonly marbles: Marble[] = [];
+  readonly track: Track;
+  /** Marble ids that have reached a goal, in order. */
+  readonly finished: number[] = [];
   private paused = false;
   private lastTime = performance.now();
   private hud: HTMLElement | null;
@@ -40,7 +45,11 @@ export class Game {
     this.hud = document.getElementById('hud');
 
     this.setupLights();
-    this.setupStage0Scene();
+    this.setupGround();
+    this.track = new Track(this.physics, this.scene);
+    buildDemoTrack(this.track);
+    this.frameTrack();
+    this.spawnAtStart();
 
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('keydown', (e) => this.onKey(e));
@@ -64,53 +73,36 @@ export class Game {
     this.scene.add(sun);
   }
 
-  /** Stage 0: ground + a static ramp + a starting marble. */
-  private setupStage0Scene(): void {
-    // Ground
+  private setupGround(): void {
     const groundMat = new THREE.MeshStandardMaterial({ color: 0xcfd8c2, roughness: 0.95 });
-    const ground = new THREE.Mesh(new THREE.BoxGeometry(40, 0.2, 40), groundMat);
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(80, 0.2, 80), groundMat);
     ground.position.y = -0.1;
     ground.receiveShadow = true;
     this.scene.add(ground);
     const gBody = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.1, 0));
-    this.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(20, 0.1, 20).setFriction(0.8), gBody);
+    this.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(40, 0.1, 40).setFriction(0.8), gBody);
 
-    // Ramp: a box tilted 20 degrees about Z, with small side rails
-    const wood = new THREE.MeshStandardMaterial({ color: 0xc89b63, roughness: 0.8 });
-    const rampLen = 6;
-    const rampW = 0.8;
-    const tilt = THREE.MathUtils.degToRad(20);
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -tilt);
-    const rampPos = new THREE.Vector3(0, 1.2, 0);
+    const grid = new THREE.GridHelper(80, 80, 0x99a08a, 0xb5bca8);
+    grid.position.y = 0.01;
+    this.scene.add(grid);
+  }
 
-    const rampGroup = new THREE.Group();
-    rampGroup.position.copy(rampPos);
-    rampGroup.quaternion.copy(q);
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(rampLen, 0.1, rampW), wood);
-    deck.castShadow = deck.receiveShadow = true;
-    rampGroup.add(deck);
-    for (const side of [-1, 1]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(rampLen, 0.25, 0.06), wood);
-      rail.position.set(0, 0.12, side * (rampW / 2 - 0.03));
-      rail.castShadow = rail.receiveShadow = true;
-      rampGroup.add(rail);
-    }
-    this.scene.add(rampGroup);
+  /** Point the camera at the bounding box of the current track. */
+  frameTrack(): void {
+    const box = new THREE.Box3().setFromObject(this.track.root);
+    if (box.isEmpty()) return;
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.x, size.y, size.z) * 0.5;
+    this.controls.target.copy(center);
+    const dist = radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2)) * 0.9;
+    this.camera.position.copy(center).add(new THREE.Vector3(0.7, 0.6, 1).normalize().multiplyScalar(dist));
+    this.controls.update();
+  }
 
-    const rBody = this.physics.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(rampPos.x, rampPos.y, rampPos.z).setRotation(q),
-    );
-    this.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(rampLen / 2, 0.05, rampW / 2).setFriction(0.6), rBody);
-    for (const side of [-1, 1]) {
-      this.physics.world.createCollider(
-        RAPIER.ColliderDesc.cuboid(rampLen / 2, 0.125, 0.03).setTranslation(0, 0.12, side * (rampW / 2 - 0.03)),
-        rBody,
-      );
-    }
-
-    // Starting marble near the high end of the ramp
-    const top = new THREE.Vector3(-rampLen / 2 + 0.4, 0.4, 0).applyQuaternion(q).add(rampPos);
-    this.spawnMarble(top);
+  /** Spawn one marble at every start piece. Returns the marbles created. */
+  spawnAtStart(): Marble[] {
+    return this.track.spawnPoints().map((p) => this.spawnMarble(p));
   }
 
   spawnMarble(pos: THREE.Vector3Like, color?: number): Marble {
@@ -137,11 +129,30 @@ export class Game {
 
   private onKey(e: KeyboardEvent): void {
     if (e.key === 'd' || e.key === 'D') this.setDebug(!this.physics.debugEnabled);
-    if (e.key === ' ') {
-      this.spawnMarble({ x: -2.4 + Math.random() * 0.2, y: 2.6, z: (Math.random() - 0.5) * 0.3 });
+    if (e.key === ' ') this.spawnAtStart();
+    if (e.key === 'r' || e.key === 'R') {
+      this.clearMarbles();
+      this.finished.length = 0;
     }
-    if (e.key === 'r' || e.key === 'R') this.clearMarbles();
     if (e.key === 'p' || e.key === 'P') this.setPaused(!this.paused);
+  }
+
+  /** Mark marbles inside any goal box as finished (once). Also cull marbles that fell off the world. */
+  checkGoals(): void {
+    const goals = this.track.goals();
+    const tmp = new THREE.Vector3();
+    for (const m of [...this.marbles]) {
+      const t = m.body.translation();
+      tmp.set(t.x, t.y, t.z);
+      if (t.y < -5) {
+        removeMarble(this.physics, this.scene, m);
+        this.marbles.splice(this.marbles.indexOf(m), 1);
+        continue;
+      }
+      if (!this.finished.includes(m.id) && goals.some((g) => g.containsPoint(tmp))) {
+        this.finished.push(m.id);
+      }
+    }
   }
 
   private onResize(): void {
@@ -161,6 +172,7 @@ export class Game {
 
     if (!this.paused) this.physics.update(dt);
     else this.physics.syncMeshes();
+    this.checkGoals();
     this.physics.updateDebug();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
