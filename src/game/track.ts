@@ -137,10 +137,13 @@ export class Track {
     return m;
   }
 
-  /** True if the piece can be placed without overlapping existing pieces. */
-  canPlace(def: PieceDef, placed: PlacedPiece): boolean {
+  /** True if the piece can be placed without overlapping existing pieces (optionally ignoring one). */
+  canPlace(def: PieceDef, placed: PlacedPiece, ignore?: TrackPieceInstance): boolean {
     const occ = this.occupiedMap();
-    return slotKeys(def, placed).every((k) => !occ.has(k));
+    return slotKeys(def, placed).every((k) => {
+      const hit = occ.get(k);
+      return !hit || hit === ignore;
+    });
   }
 
   /** Find the piece instance a raycast hit belongs to. */

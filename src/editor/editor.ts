@@ -2,18 +2,24 @@ import * as THREE from 'three';
 import type { Game } from '../game/game';
 import { buildDemoTrack } from '../game/demo';
 import { snapSolutions, type TrackPieceInstance } from '../game/track';
-import { getPiece, PIECES } from '../pieces/registry';
-import { CELL, H, type PieceDef, type PlacedPiece } from '../pieces/types';
+import { getPiece, listPieces, PIECES } from '../pieces/registry';
+import { CELL, H, worldPorts, type PieceDef, type PlacedPiece, type WorldPort } from '../pieces/types';
 import { Ghost } from './ghost';
 
 export type Mode = 'edit' | 'play';
+/** chain: new pieces attach to the active port; free: mouse-driven placement with snapping. */
+export type ToolMode = 'chain' | 'free';
 
 export const AUTOSAVE_KEY = 'marble-run.autosave.v1';
+/** Keyboard shortcuts for the palette, in listPieces() order. */
+export const PIECE_KEYS = '1234567890-=';
 const SNAP_PX = 48;
+const PORT_CLICK_PX = 28;
 const CLICK_PX = 6;
 const MAX_UNDO = 100;
 const MIN_LEVEL = 0;
 const MAX_LEVEL = 40;
+const PAN_STEP = 1.0;
 
 export interface Candidate {
   placed: PlacedPiece;
@@ -29,11 +35,12 @@ export interface SaveFile {
 }
 
 /**
- * Track editor: piece palette selection, ghost preview with port snapping,
- * placement / deletion, undo/redo, autosave, edit/play mode.
+ * Track editor: palette selection, ghost preview, chain/free placement,
+ * selection editing (rotate / move / delete), undo/redo, autosave, camera helpers.
  */
 export class Editor {
   mode: Mode = 'edit';
+  toolMode: ToolMode = 'chain';
   selectedDef: PieceDef | null = null;
   /** Level used for free (non-snapped) placement. */
   level = 4;
@@ -44,23 +51,29 @@ export class Editor {
   candidate: Candidate | null = null;
   hovered: TrackPieceInstance | null = null;
   picked: TrackPieceInstance | null = null;
+  /** Chain mode: the port the next piece attaches to. */
+  activePort: WorldPort | null = null;
+  /** Why there is no candidate (shown in the HUD). */
+  candidateMessage = '';
   /** UI refresh callback. */
   onChange: (() => void) | null = null;
 
   private ghost: Ghost;
   private highlight: THREE.BoxHelper;
-  /** Small markers on every open (unconnected) port, shown in edit mode. */
   private portMarkers = new THREE.Group();
-  private portMarkerGeo = new THREE.SphereGeometry(0.09, 12, 8);
+  private portMarkerGeo = new THREE.SphereGeometry(0.1, 12, 8);
   private portMarkerMat = new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.9, depthTest: false });
+  private activeMarker: THREE.Mesh;
   private portMarkersDirty = true;
+  private guide: THREE.Line;
+  private guideFoot: THREE.Mesh;
   private pointerPx = { x: -1, y: -1 };
   private pointerInside = false;
   private raycaster = new THREE.Raycaster();
   private downPos: { x: number; y: number; button: number } | null = null;
   private undoStack: PlacedPiece[][] = [];
   private redoStack: PlacedPiece[][] = [];
-  private dirty = true;
+  private pickedPanel: HTMLElement | null = null;
 
   constructor(private game: Game) {
     this.ghost = new Ghost(game.scene);
@@ -69,16 +82,33 @@ export class Editor {
     game.scene.add(this.highlight);
     this.portMarkers.renderOrder = 20;
     game.scene.add(this.portMarkers);
+    this.activeMarker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.95, depthTest: false }),
+    );
+    this.activeMarker.renderOrder = 21;
+    this.activeMarker.visible = false;
+    game.scene.add(this.activeMarker);
+
+    const guideGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, -1, 0)]);
+    this.guide = new THREE.Line(guideGeo, new THREE.LineDashedMaterial({ color: 0x4ade80, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.8 }));
+    this.guide.visible = false;
+    game.scene.add(this.guide);
+    this.guideFoot = new THREE.Mesh(
+      new THREE.RingGeometry(0.25, 0.32, 24),
+      new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
+    );
+    this.guideFoot.rotation.x = -Math.PI / 2;
+    this.guideFoot.visible = false;
+    game.scene.add(this.guideFoot);
 
     const el = game.renderer.domElement;
     el.addEventListener('pointermove', (e) => {
       this.pointerPx = { x: e.clientX, y: e.clientY };
       this.pointerInside = true;
-      this.dirty = true;
     });
     el.addEventListener('pointerleave', () => {
       this.pointerInside = false;
-      this.dirty = true;
     });
     el.addEventListener('pointerdown', (e) => {
       this.downPos = { x: e.clientX, y: e.clientY, button: e.button };
@@ -93,6 +123,16 @@ export class Editor {
       this.click(e.button);
     });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
+    el.addEventListener(
+      'wheel',
+      (e) => {
+        if (!e.shiftKey || this.mode !== 'edit') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.setLevel(this.level + (e.deltaY < 0 ? 1 : -1));
+      },
+      { capture: true, passive: false },
+    );
     window.addEventListener('keydown', (e) => this.onKey(e));
 
     game.beforeRender = () => this.update();
@@ -111,8 +151,14 @@ export class Editor {
       this.game.spawnAtStart();
     } else {
       this.game.setPaused(true);
-      this.dirty = true;
     }
+    this.changed();
+  }
+
+  setToolMode(tm: ToolMode): void {
+    this.toolMode = tm;
+    this.snapIndex = 0;
+    if (tm === 'chain' && !this.activePort) this.resolveActivePort(null);
     this.changed();
   }
 
@@ -122,13 +168,16 @@ export class Editor {
     this.selectedDef = defId ? getPiece(defId) : null;
     this.snapIndex = 0;
     this.picked = null;
-    this.dirty = true;
     this.changed();
+  }
+
+  selectByIndex(i: number): void {
+    const defs = listPieces();
+    if (i >= 0 && i < defs.length) this.select(this.selectedDef?.id === defs[i].id ? null : defs[i].id);
   }
 
   setLevel(level: number): void {
     this.level = THREE.MathUtils.clamp(Math.round(level), MIN_LEVEL, MAX_LEVEL);
-    this.dirty = true;
     this.changed();
   }
 
@@ -139,18 +188,97 @@ export class Editor {
     } else {
       this.rot = ((this.rot + 1) % 4) as 0 | 1 | 2 | 3;
     }
-    this.dirty = true;
     this.changed();
+  }
+
+  /** Make a port the chain-mode attachment point. */
+  setActivePort(port: WorldPort | null): void {
+    this.activePort = port ? { pos: port.pos.clone(), dir: port.dir.clone(), kind: port.kind } : null;
+    this.snapIndex = 0;
+    this.changed();
+  }
+
+  // ---------------------------------------------------------------- selection editing
+
+  pick(inst: TrackPieceInstance | null): void {
+    this.picked = inst;
+    this.changed();
+  }
+
+  /**
+   * Rotate the picked piece. If it is connected to a neighbour, cycle through the
+   * other ways of attaching to that neighbour; otherwise rotate in place.
+   */
+  rotatePicked(): boolean {
+    const inst = this.picked;
+    if (!inst) return false;
+    const cur = inst.placed;
+    let options: PlacedPiece[] = [];
+    const neighbour = this.connectedNeighbourPort(inst);
+    if (neighbour) {
+      options = snapSolutions(inst.def, neighbour);
+    } else {
+      for (let k = 1; k <= 3; k++) options.push({ ...cur, cell: { ...cur.cell }, rot: ((cur.rot + k) % 4) as 0 | 1 | 2 | 3 });
+    }
+    const same = (a: PlacedPiece, b: PlacedPiece) => a.cell.x === b.cell.x && a.cell.z === b.cell.z && a.level === b.level && a.rot === b.rot;
+    const idx = options.findIndex((o) => same(o, cur));
+    for (let k = 1; k <= options.length; k++) {
+      const next = options[(idx + k) % options.length];
+      if (same(next, cur)) continue;
+      if (!this.game.track.canPlace(inst.def, next, inst)) continue;
+      this.replacePiece(inst, next);
+      return true;
+    }
+    return false;
+  }
+
+  /** Move the picked piece up/down by whole levels (free mode). */
+  movePicked(dx: number, dLevel: number, dz: number): boolean {
+    const inst = this.picked;
+    if (!inst) return false;
+    const next: PlacedPiece = {
+      ...inst.placed,
+      cell: { x: inst.placed.cell.x + dx, z: inst.placed.cell.z + dz },
+      level: THREE.MathUtils.clamp(inst.placed.level + dLevel, MIN_LEVEL, MAX_LEVEL),
+    };
+    if (!this.game.track.canPlace(inst.def, next, inst)) return false;
+    this.replacePiece(inst, next);
+    return true;
+  }
+
+  deletePicked(): void {
+    if (this.picked) this.deletePiece(this.picked);
+  }
+
+  private replacePiece(inst: TrackPieceInstance, next: PlacedPiece): void {
+    this.pushUndo();
+    this.game.track.remove(inst);
+    const created = this.game.track.place(next);
+    this.picked = created;
+    this.afterMutation();
+  }
+
+  /** The other piece's port that `inst` is connected to (first found), or null. */
+  private connectedNeighbourPort(inst: TrackPieceInstance): WorldPort | null {
+    const mine = worldPorts(inst.def, inst.placed);
+    for (const { inst: other, port } of this.game.track.allPorts()) {
+      if (other === inst) continue;
+      if (mine.some((p) => p.pos.distanceToSquared(port.pos) < 1e-4)) return port;
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------- mutations
 
   /** Place the current candidate if valid. Returns the new instance or null. */
   place(): TrackPieceInstance | null {
-    if (this.mode !== 'edit' || !this.candidate?.valid) return null;
+    if (this.mode !== 'edit') return null;
+    this.updateCandidate();
+    if (!this.candidate?.valid) return null;
     this.pushUndo();
     const inst = this.game.track.place(this.candidate.placed);
-    this.afterMutation();
+    this.snapIndex = 0;
+    this.afterMutation(inst);
     return inst;
   }
 
@@ -216,11 +344,36 @@ export class Editor {
     this.redoStack.length = 0;
   }
 
-  private afterMutation(): void {
+  private afterMutation(justPlaced: TrackPieceInstance | null = null): void {
     this.autosave();
-    this.dirty = true;
     this.portMarkersDirty = true;
+    this.resolveActivePort(justPlaced);
     this.changed();
+  }
+
+  /**
+   * Keep the active port pointing at an open port after the track changed:
+   * prefer the exit of a just-placed piece, else the same position as before,
+   * else the last piece's exit, else nothing.
+   */
+  private resolveActivePort(justPlaced: TrackPieceInstance | null): void {
+    const open = this.game.track.openPorts();
+    const exitOf = (inst: TrackPieceInstance): WorldPort | null => {
+      const mine = open.filter((o) => o.inst === inst).map((o) => o.port);
+      return mine.find((p) => p.kind === 'out') ?? mine.find((p) => p.kind === 'both') ?? null;
+    };
+    let next: WorldPort | null = null;
+    if (justPlaced) next = exitOf(justPlaced);
+    if (!next && this.activePort) {
+      const same = open.find((o) => o.port.pos.distanceToSquared(this.activePort!.pos) < 1e-4);
+      if (same) next = same.port;
+    }
+    if (!next) {
+      const pieces = this.game.track.pieces;
+      for (let i = pieces.length - 1; i >= 0 && !next; i--) next = exitOf(pieces[i]);
+    }
+    if (!next) next = open.find((o) => o.port.kind !== 'in')?.port ?? null;
+    this.activePort = next ? { pos: next.pos.clone(), dir: next.dir.clone(), kind: next.kind } : null;
   }
 
   private refreshPortMarkers(): void {
@@ -286,28 +439,86 @@ export class Editor {
       const data = JSON.parse(text) as SaveFile;
       if (!Array.isArray(data.pieces) || data.pieces.length === 0) return false;
       this.game.track.load(data.pieces.filter((p) => PIECES.has(p.def)));
+      this.resolveActivePort(null);
       return this.game.track.pieces.length > 0;
     } catch {
       return false;
     }
   }
 
+  // ---------------------------------------------------------------- camera
+
+  /** Pan the camera and its target along the ground plane, relative to the view direction. */
+  pan(right: number, forward: number): void {
+    const cam = this.game.camera;
+    const fwd = new THREE.Vector3();
+    cam.getWorldDirection(fwd);
+    fwd.y = 0;
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+    fwd.normalize();
+    const rgt = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+    const delta = rgt.multiplyScalar(right * PAN_STEP).add(fwd.multiplyScalar(forward * PAN_STEP));
+    cam.position.add(delta);
+    this.game.controls.target.add(delta);
+    this.game.controls.update();
+  }
+
+  /** Preset views around the current orbit target. */
+  setView(view: 'top' | 'iso' | 'side'): void {
+    const c = this.game.controls;
+    const dist = Math.max(4, c.getDistance());
+    const t = c.target.clone();
+    const dir = view === 'top' ? new THREE.Vector3(0, 1, 0.001) : view === 'side' ? new THREE.Vector3(0, 0.25, 1) : new THREE.Vector3(0.7, 0.6, 1);
+    this.game.camera.position.copy(t).add(dir.normalize().multiplyScalar(dist));
+    c.update();
+  }
+
+  /** Move the orbit target to the picked piece or the active port, keeping the viewing distance. */
+  focus(): void {
+    let target: THREE.Vector3 | null = null;
+    if (this.picked) target = new THREE.Box3().setFromObject(this.picked.group).getCenter(new THREE.Vector3());
+    else if (this.activePort) target = this.activePort.pos.clone();
+    if (!target) return this.game.frameTrack();
+    const c = this.game.controls;
+    const offset = this.game.camera.position.clone().sub(c.target);
+    const dist = Math.min(offset.length(), 8);
+    c.target.copy(target);
+    this.game.camera.position.copy(target).add(offset.normalize().multiplyScalar(dist));
+    c.update();
+  }
+
   // ---------------------------------------------------------------- input
 
   private click(button: number): void {
     if (this.mode !== 'edit') return;
-    this.dirty = true;
-    this.update();
-    if (button === 0) {
-      if (this.selectedDef) {
-        this.place();
-      } else {
-        this.picked = this.hovered === this.picked ? null : this.hovered;
-        this.changed();
-      }
-    } else if (button === 2) {
+    this.updateHover();
+    if (button === 2) {
       if (this.hovered) this.deletePiece(this.hovered);
+      return;
     }
+    if (button !== 0) return;
+
+    if (this.toolMode === 'chain') {
+      // 1. Click on an open port: make it the active one (clicking the active port again places).
+      const port = this.nearestOpenPort(PORT_CLICK_PX);
+      if (port && !(this.activePort && port.pos.distanceToSquared(this.activePort.pos) < 1e-4)) {
+        this.setActivePort(port);
+        return;
+      }
+      // 2. Click on a piece: pick it (unless a port was clicked).
+      if (!port && this.hovered) {
+        this.pick(this.hovered === this.picked ? null : this.hovered);
+        return;
+      }
+      // 3. Otherwise confirm the candidate.
+      if (this.selectedDef) this.place();
+      else this.pick(null);
+      return;
+    }
+
+    // Free mode: place under the mouse, or pick what is under it.
+    if (this.selectedDef) this.place();
+    else this.pick(this.hovered === this.picked ? null : this.hovered);
   }
 
   private onKey(e: KeyboardEvent): void {
@@ -316,11 +527,11 @@ export class Editor {
     const ctrl = e.ctrlKey || e.metaKey;
     const k = e.key.toLowerCase();
 
-    if (k === 'd') return this.game.setDebug(!this.game.physics.debugEnabled);
     if (k === 'tab') {
       e.preventDefault();
       return this.setMode(this.mode === 'edit' ? 'play' : 'edit');
     }
+    if (k === 'f' && !ctrl) return this.focus();
 
     if (this.mode === 'play') {
       if (k === ' ') {
@@ -331,49 +542,140 @@ export class Editor {
         this.game.spawnAtStart();
       } else if (k === 'p') {
         this.game.setPaused(!this.game.isPaused);
+      } else if (k === 'd') {
+        this.game.setDebug(!this.game.physics.debugEnabled);
       }
       return;
     }
 
+    // --- edit mode
     if (ctrl && k === 'z' && !e.shiftKey) {
       e.preventDefault();
-      this.undo();
-    } else if ((ctrl && k === 'y') || (ctrl && k === 'z' && e.shiftKey)) {
-      e.preventDefault();
-      this.redo();
-    } else if (k === 'r') {
-      this.rotate();
-    } else if (k === 'q') {
-      this.setLevel(this.level - 1);
-    } else if (k === 'e') {
-      this.setLevel(this.level + 1);
-    } else if (k === 'escape') {
-      this.select(null);
-    } else if (k === 'delete' || k === 'backspace') {
-      const target = this.picked ?? this.hovered;
-      if (target) this.deletePiece(target);
+      return void this.undo();
     }
+    if ((ctrl && k === 'y') || (ctrl && k === 'z' && e.shiftKey)) {
+      e.preventDefault();
+      return void this.redo();
+    }
+    if (ctrl) return;
+
+    const pieceIdx = PIECE_KEYS.indexOf(e.key);
+    if (pieceIdx >= 0) return this.selectByIndex(pieceIdx);
+
+    switch (k) {
+      case 'enter':
+        this.place();
+        break;
+      case 'r':
+        if (this.picked) this.rotatePicked();
+        else this.rotate();
+        break;
+      case 'q':
+        if (this.picked && this.toolMode === 'free') this.movePicked(0, -1, 0);
+        else this.setLevel(this.level - 1);
+        break;
+      case 'e':
+        if (this.picked && this.toolMode === 'free') this.movePicked(0, 1, 0);
+        else this.setLevel(this.level + 1);
+        break;
+      case 'escape':
+        this.select(null);
+        this.pick(null);
+        break;
+      case 'delete':
+        if (this.picked ?? this.hovered) this.deletePiece((this.picked ?? this.hovered)!);
+        break;
+      case 'backspace':
+        if (this.picked) this.deletePiece(this.picked);
+        else if (this.toolMode === 'chain') this.undo();
+        break;
+      case 'w':
+        this.pan(0, 1);
+        break;
+      case 's':
+        this.pan(0, -1);
+        break;
+      case 'a':
+        this.pan(-1, 0);
+        break;
+      case 'd':
+        this.pan(1, 0);
+        break;
+      case 'arrowup':
+      case 'arrowdown':
+      case 'arrowleft':
+      case 'arrowright': {
+        if (!this.picked || this.toolMode !== 'free') break;
+        e.preventDefault();
+        const step = this.screenArrowToGrid(k);
+        this.movePicked(step.x, 0, step.z);
+        break;
+      }
+    }
+  }
+
+  /** Map an arrow key to a grid step that matches what the user sees on screen. */
+  private screenArrowToGrid(key: string): { x: number; z: number } {
+    const fwd = new THREE.Vector3();
+    this.game.camera.getWorldDirection(fwd);
+    fwd.y = 0;
+    fwd.normalize();
+    const rgt = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+    const snap = (v: THREE.Vector3) => (Math.abs(v.x) >= Math.abs(v.z) ? { x: Math.sign(v.x), z: 0 } : { x: 0, z: Math.sign(v.z) });
+    if (key === 'arrowup') return snap(fwd);
+    if (key === 'arrowdown') return snap(fwd.negate());
+    if (key === 'arrowright') return snap(rgt);
+    return snap(rgt.negate());
   }
 
   // ---------------------------------------------------------------- per-frame
 
-  /** Recompute hover + placement candidate when the pointer or state changed. */
   update(): void {
     if (this.mode !== 'edit') {
       this.portMarkers.visible = false;
-      this.game.hudExtra = '试玩模式  [Space] 放弹珠  [R] 重置  [P] 暂停  [Tab] 回编辑';
+      this.activeMarker.visible = false;
+      this.guide.visible = false;
+      this.guideFoot.visible = false;
+      this.ghost.hide();
+      const panel = (this.pickedPanel ??= document.getElementById('picked-panel'));
+      if (panel) panel.hidden = true;
+      this.game.hudExtra = '试玩模式  [Space] 放弹珠  [R] 重置  [P] 暂停  [F] 看全图  [Tab] 回编辑';
       return;
     }
     this.portMarkers.visible = true;
     this.refreshPortMarkers();
-    // Camera may have moved; always refresh in edit mode (cheap for small tracks).
-    this.dirty = false;
     this.updateHover();
     this.updateCandidate();
     this.updateHighlight();
-    const tool = this.selectedDef ? `零件 ${this.selectedDef.name}` : '未选零件（点击零件可选中，右键/Delete 删除）';
-    const snap = this.candidate ? (this.candidate.snapped ? `吸附${this.candidate.alternatives > 1 ? ` (${this.snapIndex + 1}/${this.candidate.alternatives}, R 切换)` : ''}` : `自由放置 层 ${this.level} 旋转 ${this.rot * 90}°`) : '';
-    this.game.hudExtra = `编辑模式  ${tool}  ${snap}\n[Q/E] 层 ${this.level}  [R] 旋转  [Ctrl+Z] 撤销  [Tab] 试玩`;
+    this.updateActiveMarker();
+    this.updatePickedPanel();
+    this.game.hudExtra = this.hudText();
+  }
+
+  private hudText(): string {
+    const tool = this.selectedDef ? `零件 ${this.selectedDef.name}` : '未选零件';
+    let line1: string;
+    if (this.toolMode === 'chain') {
+      const state = !this.selectedDef
+        ? this.activePort
+          ? '按数字键或点零件栏选零件，会接在橙色接口上'
+          : '轨道为空：选零件后点地面放第一块'
+        : this.candidateMessage
+          ? this.candidateMessage
+          : this.candidate?.snapped
+            ? `接在橙色接口上${this.candidate.alternatives > 1 ? `（接法 ${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}，Enter/点击确认`
+            : `自由放置：层 ${this.level}，点地面放置`;
+      line1 = `接龙模式  ${tool}  ${state}`;
+    } else {
+      const state = this.candidate ? (this.candidate.snapped ? `吸附${this.candidate.alternatives > 1 ? `（${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}` : `自由放置 层 ${this.level} 旋转 ${this.rot * 90}°`) : '';
+      line1 = `自由模式  ${tool}  ${state}`;
+    }
+    const picked = this.picked ? `  已选中「${this.picked.def.name}」：R 旋转  Delete 删除${this.toolMode === 'free' ? '  Q/E 升降  方向键平移' : ''}` : '';
+    const line2 =
+      this.toolMode === 'chain'
+        ? '[1-9] 选零件  [R] 换接法  [Backspace] 撤掉上一块  [点黄点] 换接口  [WASD] 平移  [F] 聚焦  [Tab] 试玩'
+        : '[Q/E] 层  [Shift+滚轮] 层  [R] 旋转  [Ctrl+Z] 撤销  [WASD] 平移  [F] 聚焦  [Tab] 试玩';
+    return `${line1}${picked}\n${line2}`;
   }
 
   private setRayFromPointer(): boolean {
@@ -393,7 +695,7 @@ export class Editor {
   }
 
   private updateHighlight(): void {
-    const target = this.picked ?? (this.selectedDef ? null : this.hovered);
+    const target = this.picked ?? (this.selectedDef && this.toolMode === 'free' ? null : this.hovered);
     if (target) {
       this.highlight.setFromObject(target.group);
       this.highlight.visible = true;
@@ -402,9 +704,40 @@ export class Editor {
     }
   }
 
-  private updateCandidate(): void {
+  private updateActiveMarker(): void {
+    if (this.toolMode === 'chain' && this.activePort) {
+      this.activeMarker.visible = true;
+      this.activeMarker.position.copy(this.activePort.pos).add(new THREE.Vector3(0, 0.15, 0));
+      const s = 1 + 0.15 * Math.sin(performance.now() / 180);
+      this.activeMarker.scale.setScalar(s);
+    } else {
+      this.activeMarker.visible = false;
+    }
+  }
+
+  private updatePickedPanel(): void {
+    // The panel is created by the UI layer after the editor, so look it up lazily.
+    const el = (this.pickedPanel ??= document.getElementById('picked-panel'));
+    if (!el) return;
+    if (!this.picked) {
+      el.hidden = true;
+      return;
+    }
+    const box = new THREE.Box3().setFromObject(this.picked.group);
+    const top = new THREE.Vector3(box.min.x + (box.max.x - box.min.x) / 2, box.max.y, box.min.z + (box.max.z - box.min.z) / 2);
+    const s = this.projectToPx(top);
+    el.hidden = s.behind;
+    el.style.left = `${Math.round(s.x)}px`;
+    el.style.top = `${Math.round(s.y) - 12}px`;
+    el.dataset.toolMode = this.toolMode;
+  }
+
+  updateCandidate(): void {
     const def = this.selectedDef;
-    if (!def || !this.pointerInside) {
+    this.candidateMessage = '';
+    this.guide.visible = false;
+    this.guideFoot.visible = false;
+    if (!def) {
       this.candidate = null;
       this.ghost.hide();
       return;
@@ -413,28 +746,56 @@ export class Editor {
     let snapped = false;
     let alternatives = 0;
 
-    const port = this.nearestOpenPort();
-    if (port) {
-      const sols = snapSolutions(def, port);
-      if (sols.length) {
-        alternatives = sols.length;
-        placed = sols[this.snapIndex % sols.length];
-        snapped = true;
-      }
-    }
-    if (!placed) {
-      const hit = this.groundHit(this.level * H);
-      if (!hit) {
+    if (this.toolMode === 'chain' && this.activePort) {
+      const sols = snapSolutions(def, this.activePort);
+      if (!sols.length) {
+        this.candidateMessage = `「${def.name}」接不上这个接口（方向或高度不匹配）`;
         this.candidate = null;
         this.ghost.hide();
         return;
       }
-      placed = {
-        def: def.id,
-        cell: { x: Math.round(hit.x / CELL), z: Math.round(hit.z / CELL) },
-        level: this.level,
-        rot: this.rot,
-      };
+      alternatives = sols.length;
+      placed = sols[this.snapIndex % sols.length];
+      snapped = true;
+    } else {
+      if (!this.pointerInside) {
+        this.candidate = null;
+        this.ghost.hide();
+        return;
+      }
+      if (this.toolMode === 'free') {
+        const port = this.nearestOpenPort(SNAP_PX);
+        if (port) {
+          const sols = snapSolutions(def, port);
+          if (sols.length) {
+            alternatives = sols.length;
+            placed = sols[this.snapIndex % sols.length];
+            snapped = true;
+          }
+        }
+      }
+      if (!placed) {
+        const hit = this.groundHit(this.level * H);
+        if (!hit) {
+          this.candidate = null;
+          this.ghost.hide();
+          return;
+        }
+        placed = {
+          def: def.id,
+          cell: { x: Math.round(hit.x / CELL), z: Math.round(hit.z / CELL) },
+          level: this.level,
+          rot: this.rot,
+        };
+        // Height guide: dashed line from the piece origin down to the ground, with a ring at the foot.
+        const origin = new THREE.Vector3(placed.cell.x * CELL, placed.level * H, placed.cell.z * CELL);
+        this.guide.position.copy(origin);
+        this.guide.scale.set(1, Math.max(origin.y, 0.001), 1);
+        this.guide.computeLineDistances();
+        this.guide.visible = origin.y > 0.05;
+        this.guideFoot.position.set(origin.x, 0.02, origin.z);
+        this.guideFoot.visible = true;
+      }
     }
     const valid = this.game.track.canPlace(def, placed);
     this.candidate = { placed, valid, snapped, alternatives };
@@ -452,9 +813,10 @@ export class Editor {
     return { x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h, behind: p.z > 1 };
   }
 
-  private nearestOpenPort(): import('../pieces/types').WorldPort | null {
-    let best: import('../pieces/types').WorldPort | null = null;
-    let bestD = SNAP_PX;
+  private nearestOpenPort(maxPx: number): WorldPort | null {
+    if (!this.pointerInside) return null;
+    let best: WorldPort | null = null;
+    let bestD = maxPx;
     for (const { port } of this.game.track.openPorts()) {
       const s = this.projectToPx(port.pos);
       if (s.behind) continue;

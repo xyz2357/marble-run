@@ -13,6 +13,7 @@ type Seam = {
   pieceScreenPos: (i: number) => { x: number; y: number; behind: boolean } | null;
   setMode: (m: 'edit' | 'play') => void;
   mode: () => 'edit' | 'play';
+  setToolMode: (m: 'chain' | 'free') => void;
   select: (id: string | null) => void;
   setLevel: (n: number) => void;
   rotate: () => void;
@@ -40,6 +41,7 @@ async function openEmptyEditor(page: Page) {
   await page.waitForFunction(() => window.__TEST__?.ready === true, null, { timeout: 30_000 });
   await page.evaluate(() => {
     window.__TEST__.clearTrack();
+    window.__TEST__.setToolMode('free');
     window.__TEST__.lookAt(0, 2, 0, 10);
   });
   return errors;

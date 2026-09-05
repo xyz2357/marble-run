@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Editor, Mode } from './editor/editor';
+import type { Editor, Mode, ToolMode } from './editor/editor';
 import type { Game } from './game/game';
 import type { PlacedPiece } from './pieces/types';
 
@@ -68,6 +68,17 @@ export function installTestSeam(game: Game, editor: Editor): void {
     // --- editor
     setMode: (m: Mode) => editor.setMode(m),
     mode: () => editor.mode,
+    setToolMode: (m: ToolMode) => editor.setToolMode(m),
+    toolMode: () => editor.toolMode,
+    activePort: () => (editor.activePort ? { x: editor.activePort.pos.x, y: editor.activePort.pos.y, z: editor.activePort.pos.z, kind: editor.activePort.kind } : null),
+    /** Pick a placed piece by index in pieces(); null clears. */
+    pick: (index: number | null) => editor.pick(index === null ? null : game.track.pieces[index] ?? null),
+    picked: () => (editor.picked ? { ...editor.picked.placed, cell: { ...editor.picked.placed.cell } } : null),
+    rotatePicked: () => editor.rotatePicked(),
+    movePicked: (dx: number, dl: number, dz: number) => editor.movePicked(dx, dl, dz),
+    deletePicked: () => editor.deletePicked(),
+    cameraTarget: () => ({ x: game.controls.target.x, y: game.controls.target.y, z: game.controls.target.z }),
+    cameraPos: () => ({ x: game.camera.position.x, y: game.camera.position.y, z: game.camera.position.z }),
     select: (id: string | null) => editor.select(id),
     setLevel: (n: number) => editor.setLevel(n),
     rotate: () => editor.rotate(),
@@ -76,7 +87,7 @@ export function installTestSeam(game: Game, editor: Editor): void {
     redo: () => editor.redo(),
     clearTrack: () => editor.clear(),
     candidate: () => {
-      editor.update();
+      editor.updateCandidate();
       return editor.candidate ? { ...editor.candidate, placed: { ...editor.candidate.placed } } : null;
     },
     editorState: () => ({ mode: editor.mode, selected: editor.selectedDef?.id ?? null, level: editor.level, rot: editor.rot, canUndo: editor.canUndo, canRedo: editor.canRedo }),
