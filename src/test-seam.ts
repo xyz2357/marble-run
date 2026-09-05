@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AudioEngine } from './game/audio';
 import type { Editor, Mode, ToolMode } from './editor/editor';
 import type { Game } from './game/game';
 import type { PlacedPiece } from './pieces/types';
@@ -40,6 +41,38 @@ export function installTestSeam(game: Game, editor: Editor): void {
       return { id: m.id, x: t.x, y: t.y, z: t.z };
     },
     audioStats: () => ({ available: game.audio.available, state: game.audio.state, muted: game.audio.muted, impacts: game.audio.impactCount, detected: game.audio.impactsDetected }),
+    /** Offline-render the marble sounds and return spectral centroids (Hz) of the impact and rolling parts. */
+    audioPreview: async () => {
+      const { samples, sampleRate, impactEnd } = await AudioEngine.renderPreview();
+      const centroid = (from: number, to: number) => {
+        // Magnitude spectrum via a plain DFT (every 2nd bin) over Hann-windowed 2048-sample frames.
+        const n = 2048;
+        const start = Math.floor(from * sampleRate);
+        const end = Math.min(samples.length, Math.floor(to * sampleRate));
+        let num = 0;
+        let den = 0;
+        let peak = 0;
+        const frame = new Float64Array(n);
+        for (let s0 = start; s0 + n <= end; s0 += n) {
+          for (let i = 0; i < n; i++) frame[i] = samples[s0 + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n));
+          for (let k = 1; k < n / 2; k += 2) {
+            let re = 0;
+            let im = 0;
+            const w = (2 * Math.PI * k) / n;
+            for (let i = 0; i < n; i++) {
+              re += frame[i] * Math.cos(w * i);
+              im -= frame[i] * Math.sin(w * i);
+            }
+            const mag = Math.hypot(re, im);
+            num += mag * ((k * sampleRate) / n);
+            den += mag;
+          }
+        }
+        for (let i = start; i < end; i++) peak = Math.max(peak, Math.abs(samples[i]));
+        return { centroid: den ? num / den : 0, peak };
+      };
+      return { impact: centroid(0, impactEnd), rolling: centroid(impactEnd + 0.2, impactEnd + 1.0) };
+    },
     /** Run realtime frames for a while (lets follow-camera / audio code run); resolves after ms. */
     wait: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     // --- track

@@ -20,6 +20,7 @@ type Seam = {
   cameraTarget: () => { x: number; y: number; z: number };
   audioStats: () => { available: boolean; state: string; muted: boolean; impacts: number; detected: number };
   wait: (ms: number) => Promise<void>;
+  audioPreview: () => Promise<{ impact: { centroid: number; peak: number }; rolling: { centroid: number; peak: number } }>;
   setMode: (m: 'edit' | 'play') => void;
   loadDemo: () => void;
   lookAt: (x: number, y: number, z: number, dist: number) => void;
@@ -121,4 +122,15 @@ test('audio engine starts after a gesture and registers impacts during a run', a
   if (stats.state === 'running') expect(stats.impacts).toBeGreaterThan(0);
   await page.keyboard.press('m');
   expect((await page.evaluate(() => window.__TEST__.audioStats())).muted).toBe(true);
+});
+
+test('audio character: impacts are low wooden tocks, rolling is a low rumble (no chirps)', async ({ page }) => {
+  await openPlay(page);
+  const stats = await page.evaluate(() => window.__TEST__.audioPreview());
+  console.log('audio preview', JSON.stringify(stats));
+  expect(stats.impact.peak).toBeGreaterThan(0.05);
+  expect(stats.rolling.peak).toBeGreaterThan(0.02);
+  // Spectral centroid well below the 1.5-3 kHz "bird" range.
+  expect(stats.impact.centroid).toBeLessThan(1100);
+  expect(stats.rolling.centroid).toBeLessThan(700);
 });
