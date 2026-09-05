@@ -1,9 +1,23 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicsWorld } from '../physics/world';
+import { FIXED_DT, PhysicsWorld } from '../physics/world';
+import { AudioEngine, type MarbleAudioState } from './audio';
 import { spawnMarble, removeMarble, type Marble } from './marble';
 import { Track } from './track';
+
+export const MARBLE_COLORS = [0x3aa0ff, 0xff5a5a, 0x5ad46a, 0xffc93a, 0xc36bff, 0xff8a3a, 0x2dd4bf, 0xf472b6];
+const MAX_MARBLES = 60;
+const BURST_INTERVAL = 0.35;
+const AUTO_INTERVAL = 1.2;
+const MAX_STEPS_PER_FRAME = 8;
+
+export interface RaceResult {
+  id: number;
+  color: number;
+  /** Seconds from spawn to goal. */
+  time: number;
+}
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -11,20 +25,38 @@ export class Game {
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
   readonly physics: PhysicsWorld;
+  readonly audio = new AudioEngine();
   readonly marbles: Marble[] = [];
   readonly track: Track;
   /** Marble ids that have reached a goal, in order. */
   readonly finished: number[] = [];
+  readonly results: RaceResult[] = [];
+  /** Simulation seconds since the last reset. */
+  simTime = 0;
+  /** 1 = realtime, 0.25 = slow motion. */
+  timeScale = 1;
+  /** Follow the leading marble with the camera. */
+  follow = false;
+  /** Keep spawning a marble every AUTO_INTERVAL seconds. */
+  autoSpawn = false;
   /** Extra status text appended to the HUD (set by the editor). */
   hudExtra = '';
   /** Called once per frame before rendering (the editor hooks in here). */
   beforeRender: (() => void) | null = null;
+  /** Called whenever marbles / results change (UI refresh). */
+  onRaceChange: (() => void) | null = null;
+
   private paused = false;
+  private accumulator = 0;
   private lastTime = performance.now();
   private hud: HTMLElement | null;
   private frames = 0;
   private fpsTimer = 0;
   private fps = 0;
+  private spawnQueue: number[] = []; // sim times at which to spawn
+  private nextAutoSpawn = 0;
+  private colorIndex = 0;
+  private tmpV = new THREE.Vector3();
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -88,6 +120,8 @@ export class Game {
     this.scene.add(grid);
   }
 
+  // ---------------------------------------------------------------- camera
+
   /** Point the camera at the bounding box of the current track. */
   frameTrack(): void {
     const box = new THREE.Box3().setFromObject(this.track.root);
@@ -106,54 +140,177 @@ export class Game {
     this.controls.update();
   }
 
+  /** The marble the follow camera tracks: the oldest one still running. */
+  leader(): Marble | null {
+    return this.marbles.find((m) => m.finishTime === null) ?? this.marbles[this.marbles.length - 1] ?? null;
+  }
+
+  private updateFollow(dt: number): void {
+    if (!this.follow) return;
+    const m = this.leader();
+    if (!m) return;
+    const t = m.body.translation();
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    const k = 1 - Math.exp(-6 * dt);
+    this.controls.target.lerp(this.tmpV.set(t.x, t.y, t.z), k);
+    this.camera.position.copy(this.controls.target).add(offset);
+  }
+
+  setFollow(on: boolean): void {
+    this.follow = on;
+    if (on) {
+      const m = this.leader();
+      if (m) {
+        const t = m.body.translation();
+        const offset = this.camera.position.clone().sub(this.controls.target);
+        const dist = Math.min(offset.length(), 7);
+        this.controls.target.set(t.x, t.y, t.z);
+        this.camera.position.copy(this.controls.target).add(offset.normalize().multiplyScalar(dist));
+      }
+    }
+    this.onRaceChange?.();
+  }
+
+  // ---------------------------------------------------------------- marbles
+
   /** Spawn one marble at every start piece. Returns the marbles created. */
   spawnAtStart(): Marble[] {
     return this.track.spawnPoints().map((p) => this.spawnMarble(p));
   }
 
   spawnMarble(pos: THREE.Vector3Like, color?: number): Marble {
-    const palette = [0x3aa0ff, 0xff5a5a, 0x5ad46a, 0xffc93a, 0xc36bff, 0xff8a3a];
-    const c = color ?? palette[this.marbles.length % palette.length];
-    const m = spawnMarble(this.physics, this.scene, pos, c);
+    if (this.marbles.length >= MAX_MARBLES) {
+      const oldest = this.marbles.find((m) => m.finishTime !== null) ?? this.marbles[0];
+      this.removeOne(oldest);
+    }
+    const c = color ?? MARBLE_COLORS[this.colorIndex++ % MARBLE_COLORS.length];
+    const m = spawnMarble(this.physics, this.scene, pos, c, this.simTime);
     this.marbles.push(m);
+    this.onRaceChange?.();
     return m;
   }
 
+  /** Queue n marbles per start piece, released one after another. */
+  spawnBurst(n: number): void {
+    for (let i = 0; i < n; i++) this.spawnQueue.push(this.simTime + i * BURST_INTERVAL);
+  }
+
+  setAutoSpawn(on: boolean): void {
+    this.autoSpawn = on;
+    this.nextAutoSpawn = this.simTime;
+    this.onRaceChange?.();
+  }
+
+  private removeOne(m: Marble): void {
+    removeMarble(this.physics, this.scene, m);
+    const i = this.marbles.indexOf(m);
+    if (i >= 0) this.marbles.splice(i, 1);
+  }
+
+  /** Remove all marbles and reset the race clock / results. */
   clearMarbles(): void {
     for (const m of this.marbles) removeMarble(this.physics, this.scene, m);
     this.marbles.length = 0;
     this.finished.length = 0;
+    this.results.length = 0;
+    this.spawnQueue.length = 0;
+    this.simTime = 0;
+    this.nextAutoSpawn = 0;
+    this.colorIndex = 0;
+    this.onRaceChange?.();
   }
+
+  // ---------------------------------------------------------------- simulation
 
   setPaused(p: boolean): void {
     this.paused = p;
     this.lastTime = performance.now();
+    this.accumulator = 0;
   }
 
   get isPaused(): boolean {
     return this.paused;
   }
 
+  setTimeScale(s: number): void {
+    this.timeScale = s;
+    this.onRaceChange?.();
+  }
+
   setDebug(on: boolean): void {
     this.physics.setDebug(this.scene, on);
+  }
+
+  /** Advance the simulation by n fixed steps: physics, spawn queue, goals. */
+  step(n: number): void {
+    const v = this.tmpV;
+    for (let i = 0; i < n; i++) {
+      this.physics.stepOnce();
+      this.simTime += FIXED_DT;
+      // Per-step velocity change: gravity contributes ~0.08 m/s per step, a real hit much more.
+      for (const m of this.marbles) {
+        const lv = m.body.linvel();
+        v.set(lv.x, lv.y, lv.z);
+        const d = m.prevVel.distanceTo(v);
+        if (d > m.pendingImpact) m.pendingImpact = d;
+        m.prevVel.copy(v);
+      }
+      this.processSpawns();
+    }
+    this.physics.syncMeshes();
+    this.checkGoals();
+  }
+
+  private processSpawns(): void {
+    let spawned = false;
+    while (this.spawnQueue.length && this.spawnQueue[0] <= this.simTime) {
+      this.spawnQueue.shift();
+      this.spawnAtStart();
+      spawned = true;
+    }
+    if (this.autoSpawn && this.simTime >= this.nextAutoSpawn) {
+      this.nextAutoSpawn = this.simTime + AUTO_INTERVAL;
+      this.spawnAtStart();
+      spawned = true;
+    }
+    if (spawned) this.onRaceChange?.();
   }
 
   /** Mark marbles inside any goal box as finished (once). Also cull marbles that fell off the world. */
   checkGoals(): void {
     const goals = this.track.goals();
-    const tmp = new THREE.Vector3();
+    let changed = false;
     for (const m of [...this.marbles]) {
       const t = m.body.translation();
-      tmp.set(t.x, t.y, t.z);
+      this.tmpV.set(t.x, t.y, t.z);
       if (t.y < -5) {
-        removeMarble(this.physics, this.scene, m);
-        this.marbles.splice(this.marbles.indexOf(m), 1);
+        this.removeOne(m);
+        changed = true;
         continue;
       }
-      if (!this.finished.includes(m.id) && goals.some((g) => g.containsPoint(tmp))) {
+      if (m.finishTime === null && goals.some((g) => g.containsPoint(this.tmpV))) {
+        m.finishTime = this.simTime;
         this.finished.push(m.id);
+        this.results.push({ id: m.id, color: m.color, time: this.simTime - m.spawnTime });
+        changed = true;
       }
     }
+    if (changed) this.onRaceChange?.();
+  }
+
+  /** Per-frame sound: rolling voices + impact clicks from velocity changes. */
+  private updateAudio(): void {
+    const states: MarbleAudioState[] = [];
+    for (const m of this.marbles) {
+      const lv = m.body.linvel();
+      let contact = false;
+      this.physics.world.contactPairsWith(m.collider, () => {
+        contact = true;
+      });
+      states.push({ id: m.id, speed: Math.hypot(lv.x, lv.y, lv.z), contact, impact: m.pendingImpact, timbre: m.timbre });
+      m.pendingImpact = 0;
+    }
+    this.audio.update(states);
   }
 
   private onResize(): void {
@@ -168,13 +325,25 @@ export class Game {
 
   private frame(): void {
     const now = performance.now();
-    const dt = (now - this.lastTime) / 1000;
+    const dt = Math.min((now - this.lastTime) / 1000, 0.25);
     this.lastTime = now;
 
-    if (!this.paused) this.physics.update(dt);
-    else this.physics.syncMeshes();
-    this.checkGoals();
+    if (!this.paused) {
+      this.accumulator += dt * this.timeScale;
+      let steps = 0;
+      while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
+        this.accumulator -= FIXED_DT;
+        steps++;
+      }
+      if (steps === MAX_STEPS_PER_FRAME) this.accumulator = 0;
+      if (steps > 0) this.step(steps);
+      else this.physics.syncMeshes();
+    } else {
+      this.physics.syncMeshes();
+    }
+    this.updateAudio();
     this.physics.updateDebug();
+    this.updateFollow(dt);
     this.controls.update();
     this.beforeRender?.();
     this.renderer.render(this.scene, this.camera);

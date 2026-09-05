@@ -552,16 +552,39 @@ export class Editor {
     if (k === 'f' && !ctrl) return this.focus();
 
     if (this.mode === 'play') {
-      if (k === ' ') {
-        e.preventDefault();
-        this.game.spawnAtStart();
-      } else if (k === 'r') {
-        this.game.clearMarbles();
-        this.game.spawnAtStart();
-      } else if (k === 'p') {
-        this.game.setPaused(!this.game.isPaused);
-      } else if (k === 'd') {
-        this.game.setDebug(!this.game.physics.debugEnabled);
+      const g = this.game;
+      switch (k) {
+        case ' ':
+          e.preventDefault();
+          g.spawnAtStart();
+          break;
+        case 'b':
+          g.spawnBurst(8);
+          break;
+        case 'n':
+          g.setAutoSpawn(!g.autoSpawn);
+          break;
+        case 'r':
+          g.clearMarbles();
+          g.spawnAtStart();
+          break;
+        case 't':
+          g.setTimeScale(g.timeScale === 1 ? 0.25 : 1);
+          break;
+        case 'c':
+          g.setFollow(!g.follow);
+          break;
+        case 'p':
+          g.setPaused(!g.isPaused);
+          this.changed();
+          break;
+        case 'm':
+          g.audio.setMuted(!g.audio.muted);
+          this.changed();
+          break;
+        case 'd':
+          g.setDebug(!g.physics.debugEnabled);
+          break;
       }
       return;
     }
@@ -657,7 +680,9 @@ export class Editor {
       this.ghost.hide();
       const panel = (this.pickedPanel ??= document.getElementById('picked-panel'));
       if (panel) panel.hidden = true;
-      this.game.hudExtra = '试玩模式  [Space] 放弹珠  [R] 重置  [P] 暂停  [F] 看全图  [Tab] 回编辑';
+      const g = this.game;
+      const flags = [g.timeScale !== 1 ? '慢动作' : '', g.follow ? '跟随中' : '', g.autoSpawn ? '连发中' : '', g.isPaused ? '已暂停' : ''].filter(Boolean).join('  ');
+      this.game.hudExtra = `试玩模式  ${flags}  [Tab] 回编辑`;
       return;
     }
     this.portMarkers.visible = true;

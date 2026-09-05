@@ -44,12 +44,15 @@ export class PhysicsWorld {
     this.syncMeshes();
   }
 
+  /** One fixed step without syncing meshes (the caller syncs once per frame). */
+  stepOnce(): void {
+    this.world.step();
+    this.stepCount++;
+  }
+
   /** Step exactly n fixed steps (used by tests). */
   stepN(n: number): void {
-    for (let i = 0; i < n; i++) {
-      this.world.step();
-      this.stepCount++;
-    }
+    for (let i = 0; i < n; i++) this.stepOnce();
     this.syncMeshes();
   }
 

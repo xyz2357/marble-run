@@ -46,6 +46,27 @@
     #picked-panel button.danger:hover { background: rgba(224, 87, 79, 0.4); }
     #picked-panel[data-tool-mode="chain"] .free-only { display: none; }
 
+    #playbar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 6px 8px;
+               background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px; backdrop-filter: blur(6px); }
+    #playbar button { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid transparent; border-radius: 6px;
+                      padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+    #playbar button:hover { background: rgba(255,255,255,0.12); }
+    #playbar button.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+    #playbar button.primary { background: rgba(62, 196, 109, 0.25); }
+    #playbar button.primary:hover { background: rgba(62, 196, 109, 0.45); }
+    #playbar kbd { font: 10px/1 ui-monospace, monospace; opacity: 0.6; margin-left: 4px; }
+
+    #race { position: fixed; top: 64px; right: 12px; width: 190px; padding: 10px 12px; background: var(--panel);
+            border: 1px solid var(--panel-border); border-radius: 10px; backdrop-filter: blur(6px); font-size: 13px; }
+    #race h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; }
+    #race .clock { font-variant-numeric: tabular-nums; color: var(--text); }
+    #race ol { margin: 0; padding: 0; list-style: none; max-height: 40vh; overflow-y: auto; scrollbar-width: thin; }
+    #race li { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-variant-numeric: tabular-nums; }
+    #race li .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset -2px -2px 3px rgba(0,0,0,.35); flex: none; }
+    #race li .rank { width: 2ch; color: var(--muted); }
+    #race li .time { margin-left: auto; }
+    #race .empty { color: var(--muted); }
+
     #palette { position: fixed; top: 64px; left: 12px; bottom: 96px; width: 104px; overflow-y: auto; display: flex;
                flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--panel-border);
                border-radius: 10px; backdrop-filter: blur(6px); scrollbar-width: thin; }

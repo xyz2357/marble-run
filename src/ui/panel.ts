@@ -1,6 +1,7 @@
 import { PIECE_KEYS, type Editor } from '../editor/editor';
 import type { Game } from '../game/game';
 import { listPieces } from '../pieces/registry';
+import { createPlayBar } from './playbar';
 import { renderThumbnails } from './thumbs';
 
 /** Builds the HTML overlay: top toolbar, left piece palette, floating panel for the picked piece. */
@@ -159,7 +160,10 @@ export function createPanel(editor: Editor, game: Game): void {
     });
   });
 
+  const playBar = createPlayBar(editor, game, root);
+
   const refresh = (): void => {
+    playBar.refresh();
     root.querySelectorAll<HTMLButtonElement>('.piece').forEach((b) => {
       b.classList.toggle('active', b.dataset.id === editor.selectedDef?.id);
     });
@@ -172,7 +176,7 @@ export function createPanel(editor: Editor, game: Game): void {
     (root.querySelector('[data-action="redo"]') as HTMLButtonElement).disabled = !editor.canRedo;
     root.querySelector('#level-label')!.textContent = `${editor.level}`;
     root.querySelector('#level-group')!.classList.toggle('dim', editor.toolMode === 'chain');
-    palette.classList.toggle('disabled', editor.mode !== 'edit');
+    palette.hidden = editor.mode !== 'edit';
     root.querySelector('#toolmode-group')!.classList.toggle('disabled', editor.mode !== 'edit');
   };
   editor.onChange = refresh;

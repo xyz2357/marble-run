@@ -11,10 +11,7 @@ export function installTestSeam(game: Game, editor: Editor): void {
     /** Pause the realtime loop; tests then drive with stepN. */
     pause: () => game.setPaused(true),
     resume: () => game.setPaused(false),
-    stepN: (n: number) => {
-      game.physics.stepN(n);
-      game.checkGoals();
-    },
+    stepN: (n: number) => game.step(n),
     stepCount: () => game.physics.stepCount,
     setDebug: (on: boolean) => game.setDebug(on),
     // --- marbles
@@ -28,6 +25,23 @@ export function installTestSeam(game: Game, editor: Editor): void {
         return { id: m.id, x: t.x, y: t.y, z: t.z, vx: v.x, vy: v.y, vz: v.z };
       }),
     finished: () => [...game.finished],
+    results: () => game.results.map((r) => ({ ...r })),
+    simTime: () => game.simTime,
+    spawnBurst: (n: number) => game.spawnBurst(n),
+    setAutoSpawn: (on: boolean) => game.setAutoSpawn(on),
+    setTimeScale: (s: number) => game.setTimeScale(s),
+    timeScale: () => game.timeScale,
+    setFollow: (on: boolean) => game.setFollow(on),
+    follow: () => game.follow,
+    leader: () => {
+      const m = game.leader();
+      if (!m) return null;
+      const t = m.body.translation();
+      return { id: m.id, x: t.x, y: t.y, z: t.z };
+    },
+    audioStats: () => ({ available: game.audio.available, state: game.audio.state, muted: game.audio.muted, impacts: game.audio.impactCount, detected: game.audio.impactsDetected }),
+    /** Run realtime frames for a while (lets follow-camera / audio code run); resolves after ms. */
+    wait: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     // --- track
     pieces: () => game.track.toJSON(),
     ports: () =>
