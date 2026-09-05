@@ -714,7 +714,9 @@ export class Editor {
       const state = !this.selectedDef
         ? this.activePort
           ? `按数字键或点零件栏选零件，会接在橙色接口上${this.chainDir === 'backward' ? '（正在从入口倒着铺）' : ''}`
-          : '轨道为空：选零件后点地面放第一块'
+          : this.game.track.pieces.length === 0
+            ? '轨道为空：选零件后点地面放第一块'
+            : '没有空接口可接：删掉一块再接，或切到自由模式'
         : this.candidateMessage
           ? this.candidateMessage
           : this.candidate?.snapped
