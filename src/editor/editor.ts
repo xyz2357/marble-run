@@ -15,7 +15,7 @@ export const AUTOSAVE_KEY = 'marble-run.autosave.v1';
 export const PIECE_KEYS = '1234567890-=';
 const SNAP_PX = 48;
 const PORT_CLICK_PX = 28;
-const CLICK_PX = 6;
+const CLICK_PX = 8;
 const MAX_UNDO = 100;
 const MIN_LEVEL = 0;
 const MAX_LEVEL = 40;
@@ -206,8 +206,10 @@ export class Editor {
 
   // ---------------------------------------------------------------- selection editing
 
+  /** Select an existing piece for editing. Picking drops the placement tool: you either place or edit. */
   pick(inst: TrackPieceInstance | null): void {
     this.picked = inst;
+    if (inst) this.selectedDef = null;
     this.changed();
   }
 
@@ -516,6 +518,15 @@ export class Editor {
     }
     if (button !== 0) return;
 
+    // A click on empty space while a piece is picked just deselects it.
+    if (this.picked && !this.hovered) {
+      const port = this.nearestOpenPort(PORT_CLICK_PX);
+      if (!port) {
+        this.pick(null);
+        return;
+      }
+    }
+
     if (this.toolMode === 'chain') {
       // 1. Click on an open port: make it the active one (clicking the active port again places).
       const port = this.nearestOpenPort(PORT_CLICK_PX);
@@ -627,6 +638,7 @@ export class Editor {
         if (this.picked ?? this.hovered) this.deletePiece((this.picked ?? this.hovered)!);
         break;
       case 'backspace':
+        e.preventDefault();
         if (this.picked) this.deletePiece(this.picked);
         else if (this.toolMode === 'chain') this.undo();
         break;

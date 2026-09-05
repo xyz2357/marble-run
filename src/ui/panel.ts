@@ -50,6 +50,7 @@ export function createPanel(editor: Editor, game: Game): void {
       <button data-picked="up" class="free-only" title="E">升</button>
       <button data-picked="down" class="free-only" title="Q">降</button>
       <button data-picked="delete" class="danger" title="Delete">删除</button>
+      <button data-picked="close" title="Esc / 点空白处">✕</button>
     </div>
   `;
 
@@ -156,8 +157,22 @@ export function createPanel(editor: Editor, game: Game): void {
         case 'delete':
           editor.deletePicked();
           break;
+        case 'close':
+          editor.pick(null);
+          break;
       }
     });
+  });
+
+  // Classic web annoyances: buttons must not keep keyboard focus (Space/Enter would re-trigger them),
+  // and the browser context menu must not pop up over the game's panels.
+  root.addEventListener('mousedown', (e) => {
+    if ((e.target as HTMLElement).closest('button')) e.preventDefault();
+  });
+  document.addEventListener('contextmenu', (e) => {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    e.preventDefault();
   });
 
   const playBar = createPlayBar(editor, game, root);

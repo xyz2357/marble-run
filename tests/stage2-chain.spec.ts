@@ -192,3 +192,44 @@ test('backward chaining from an entry port and gap closing', async ({ page }) =>
   expect(await page.evaluate(() => window.__TEST__.openPortsScreen())).toHaveLength(0);
   expect(await page.evaluate(() => window.__TEST__.activePort())).toBeNull();
 });
+
+test('picked panel closes by clicking empty space or the close button; no text selection / context menu', async ({ page }) => {
+  await openEmpty(page);
+  await page.keyboard.press('1');
+  await page.mouse.move(640, 420);
+  await page.mouse.click(640, 420);
+  await page.keyboard.press('3');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  // Click the slope to pick it.
+  const pos = (await page.evaluate(() => window.__TEST__.pieceScreenPos(1)))!;
+  await page.mouse.click(pos.x, pos.y);
+  expect((await page.evaluate(() => window.__TEST__.picked()))?.def).toBe('slope');
+  await expect(page.locator('#picked-panel')).toBeVisible();
+  // Click empty ground: deselects, nothing placed.
+  await page.mouse.click(1100, 700);
+  expect(await page.evaluate(() => window.__TEST__.picked())).toBeNull();
+  expect(await page.evaluate(() => window.__TEST__.pieces().length)).toBe(2);
+  await expect(page.locator('#picked-panel')).toBeHidden();
+  // Close button works too.
+  await page.mouse.click(pos.x, pos.y);
+  await page.click('#picked-panel [data-picked="close"]');
+  expect(await page.evaluate(() => window.__TEST__.picked())).toBeNull();
+
+  // Dragging across the HUD/panels must not select text.
+  await page.mouse.move(20, 720);
+  await page.mouse.down();
+  await page.mouse.move(600, 760, { steps: 5 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
+  // Context menu is suppressed everywhere except inputs.
+  const prevented = await page.evaluate(() => {
+    const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    document.getElementById('hud')!.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  });
+  expect(prevented).toBe(true);
+  // Clicking a toolbar button must not leave it focused (Space would re-trigger it).
+  await page.click('#toolbar [data-action="view-iso"]');
+  expect(await page.evaluate(() => document.activeElement?.tagName ?? '')).not.toBe('BUTTON');
+});

@@ -14,7 +14,13 @@
       --accent-text: #2a2418;
     }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d22;
-                 font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--text); }
+                 font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--text);
+                 user-select: none; -webkit-user-select: none; overscroll-behavior: none; touch-action: none; }
+    input, textarea { user-select: text; -webkit-user-select: text; }
+    canvas, img { -webkit-user-drag: none; user-drag: none; }
+    [hidden] { display: none !important; }
+    button:focus { outline: none; }
+    button:focus-visible { outline: 2px solid var(--accent); }
     #app { position: fixed; inset: 0; }
     canvas { display: block; }
     button { font: inherit; }
