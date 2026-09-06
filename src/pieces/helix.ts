@@ -39,10 +39,12 @@ export function helixDef(turns = 1): PieceDef {
         }
         return v3(s - lIn - lSpiral, 0, z);
       };
-      // Height eases from `drop` at the entry to 0 at the exit over the whole length.
+      // Height descends from `drop` at the entry to 0 at the exit over the whole length: mostly
+      // linear (so the exit still has a few degrees of slope and nothing stalls there) with a
+      // little easing at both ends.
       const pos = (t: number): THREE.Vector3 => {
         const p = horizontal(t * total);
-        p.y = drop * (1 - smooth(t));
+        p.y = drop * (1 - (0.7 * t + 0.3 * smooth(t)));
         return p;
       };
       const path: PathFn = (t) => {

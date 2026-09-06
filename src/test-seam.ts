@@ -130,9 +130,9 @@ export function installTestSeam(game: Game, editor: Editor): void {
     loadDemo: (which: 1 | 2 = 1) => editor.loadDemo(which),
     frameTrack: () => game.frameTrack(),
     /** Orthographic-like top view over a point (debugging geometry). */
-    topView: (x: number, z: number, height: number) => {
-      game.controls.target.set(x, 0, z);
-      game.camera.position.set(x, height, z + 0.001);
+    topView: (x: number, y: number, z: number, height: number) => {
+      game.controls.target.set(x, y, z);
+      game.camera.position.set(x, y + height, z + 0.001);
       game.controls.update();
     },
     lookAt: (x: number, y: number, z: number, dist: number) => {

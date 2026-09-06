@@ -15,6 +15,7 @@ type Seam = {
   setShape: (s: 'ball' | 'egg') => void;
   shape: () => 'ball' | 'egg';
   lookAt: (x: number, y: number, z: number, dist: number) => void;
+  topView: (x: number, y: number, z: number, height: number) => void;
 };
 declare global {
   interface Window {
@@ -52,6 +53,9 @@ test('egg-shaped marble: selectable, spawns as an egg, tumbles down a slope trac
   const ms = await page.evaluate(() => window.__TEST__.marbles());
   expect(ms).toHaveLength(1);
   expect(ms[0].shape).toBe('egg');
+  // Top-down close-up at the spawn point: the egg's outline should be visibly elongated across the track.
+  await page.evaluate(([x, y, z]) => window.__TEST__.topView(x, y, z, 1.4), [ms[0].x, ms[0].y, ms[0].z] as const);
+  await page.screenshot({ path: 'test-results/stage4c-egg-top.png' });
 
   const trail: string[] = [];
   let finished = 0;
