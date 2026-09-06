@@ -1,5 +1,6 @@
 import type { Editor } from '../editor/editor';
 import type { Game } from '../game/game';
+import { MARBLE_SHAPES, type MarbleShape } from '../game/marble';
 
 /** Bottom bar with marble controls and the race panel, visible in play mode. */
 export function createPlayBar(editor: Editor, game: Game, root: HTMLElement): { refresh: () => void } {
@@ -15,6 +16,9 @@ export function createPlayBar(editor: Editor, game: Game, root: HTMLElement): { 
     <button data-play="follow">跟随<kbd>C</kbd></button>
     <button data-play="pause">暂停<kbd>P</kbd></button>
     <button data-play="mute">音效<kbd>M</kbd></button>
+    <label class="shape">形状
+      <select data-play="shape">${MARBLE_SHAPES.map((sh) => `<option value="${sh.id}">${sh.name}</option>`).join('')}</select>
+    </label>
   `;
   root.appendChild(bar);
 
@@ -27,7 +31,10 @@ export function createPlayBar(editor: Editor, game: Game, root: HTMLElement): { 
   const list = race.querySelector<HTMLOListElement>('ol')!;
   const empty = race.querySelector<HTMLDivElement>('.empty')!;
 
-  bar.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((btn) => {
+  const shapeSelect = bar.querySelector<HTMLSelectElement>('select[data-play="shape"]')!;
+  shapeSelect.addEventListener('change', () => game.setMarbleShape(shapeSelect.value as MarbleShape));
+
+  bar.querySelectorAll<HTMLButtonElement>('button[data-play]').forEach((btn) => {
     btn.addEventListener('click', () => {
       switch (btn.dataset.play) {
         case 'one':
@@ -73,6 +80,7 @@ export function createPlayBar(editor: Editor, game: Game, root: HTMLElement): { 
     setActive('follow', game.follow);
     setActive('pause', game.isPaused);
     setActive('mute', !game.audio.muted);
+    shapeSelect.value = game.marbleShape;
     bar.querySelector('[data-play="mute"]')!.textContent = '';
     bar.querySelector('[data-play="mute"]')!.insertAdjacentHTML('beforeend', `${game.audio.muted ? '静音' : '音效'}<kbd>M</kbd>`);
 

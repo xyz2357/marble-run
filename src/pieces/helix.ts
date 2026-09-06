@@ -1,10 +1,15 @@
-import { helixPath, linePath, mergeGeometries, sweep } from '../geometry/sweep';
+import * as THREE from 'three';
+import { sweep, type PathFn } from '../geometry/sweep';
 import { H, v3, type PieceDef } from './types';
+
+const smooth = (t: number) => t * t * (3 - 2 * t);
 
 /**
  * Helix over a 3x3 block (anchor = center cell). Enters at the -X edge of the
  * (-1,-1) cell heading +X, circles the block center once per turn and exits at
- * the +X edge of the (1,-1) cell, `turns*2` levels lower.
+ * the +X edge of the (1,-1) cell, `turns*2` levels lower. The lead-in, spiral
+ * and lead-out form ONE continuously descending path (no flat stretches where a
+ * slow or wobbly marble could stall).
  */
 export function helixDef(turns = 1): PieceDef {
   const dropUnits = 2 * turns;
@@ -21,12 +26,33 @@ export function helixDef(turns = 1): PieceDef {
       { pos: v3(1.5, 0, z), dir: v3(1, 0, 0), kind: 'out' },
     ],
     build() {
-      const top = drop;
-      const leadIn = sweep(linePath(v3(-1.5, top, z), v3(0, top, z)), 2, undefined, true);
-      // helix center at (0, top, 0): at theta=0 the point is (0, top, -R) = (0, top, z) heading +X
-      const spiral = sweep(helixPath(v3(0, top, 0), R, turns, drop, 1), 48 * turns);
-      const leadOut = sweep(linePath(v3(0, 0, z), v3(1.5, 0, z)), 2);
-      return { parts: [{ geometry: mergeGeometries([leadIn, spiral, leadOut]), material: 'wood' }] };
+      // Horizontal layout by arc length: lead-in (1.5) + spiral (2*pi*R*turns) + lead-out (1.5).
+      const lIn = 1.5;
+      const lSpiral = 2 * Math.PI * R * turns;
+      const lOut = 1.5;
+      const total = lIn + lSpiral + lOut;
+      const horizontal = (s: number): THREE.Vector3 => {
+        if (s <= lIn) return v3(-1.5 + s, 0, z);
+        if (s <= lIn + lSpiral) {
+          const th = (s - lIn) / R; // helix centre at (0, ., 0); th=0 at (0, ., -R) heading +X
+          return v3(R * Math.sin(th), 0, -R * Math.cos(th));
+        }
+        return v3(s - lIn - lSpiral, 0, z);
+      };
+      // Height eases from `drop` at the entry to 0 at the exit over the whole length.
+      const pos = (t: number): THREE.Vector3 => {
+        const p = horizontal(t * total);
+        p.y = drop * (1 - smooth(t));
+        return p;
+      };
+      const path: PathFn = (t) => {
+        const h = 1e-4;
+        const a = pos(Math.max(0, t - h));
+        const b = pos(Math.min(1, t + h));
+        return { pos: pos(t), tan: b.sub(a).normalize() };
+      };
+      const segments = Math.round(total * 8) + 48 * turns;
+      return { parts: [{ geometry: sweep(path, segments), material: 'wood' }] };
     },
   };
 }

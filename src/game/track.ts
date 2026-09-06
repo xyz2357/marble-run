@@ -143,8 +143,14 @@ export class Track {
     for (const inst of this.pieces) for (const m of inst.mechanisms) m.update(dt, marbles);
   }
 
-  spawnPoints(): THREE.Vector3[] {
-    return this.pieces.filter((p) => p.spawn).map((p) => p.spawn!.clone());
+  /** World spawn points of all start pieces, with the direction the track leaves in. */
+  spawnPoints(): { pos: THREE.Vector3; dir: THREE.Vector3 }[] {
+    return this.pieces
+      .filter((p) => p.spawn)
+      .map((p) => {
+        const out = p.def.ports.find((port) => port.kind === 'out') ?? p.def.ports[0];
+        return { pos: p.spawn!.clone(), dir: rotY(out.dir, p.placed.rot) };
+      });
   }
 
   goals(): THREE.Box3[] {

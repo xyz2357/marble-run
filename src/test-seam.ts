@@ -23,7 +23,7 @@ export function installTestSeam(game: Game, editor: Editor): void {
       game.marbles.map((m) => {
         const t = m.body.translation();
         const v = m.body.linvel();
-        return { id: m.id, x: t.x, y: t.y, z: t.z, vx: v.x, vy: v.y, vz: v.z };
+        return { id: m.id, shape: m.shape, x: t.x, y: t.y, z: t.z, vx: v.x, vy: v.y, vz: v.z };
       }),
     finished: () => [...game.finished],
     /** Contact normals / points for one marble (debugging geometry). */
@@ -49,6 +49,8 @@ export function installTestSeam(game: Game, editor: Editor): void {
     results: () => game.results.map((r) => ({ ...r })),
     simTime: () => game.simTime,
     spawnBurst: (n: number, interval?: number) => game.spawnBurst(n, interval),
+    setShape: (shape: 'ball' | 'egg') => game.setMarbleShape(shape),
+    shape: () => game.marbleShape,
     setAutoSpawn: (on: boolean) => game.setAutoSpawn(on),
     setTimeScale: (s: number) => game.setTimeScale(s),
     timeScale: () => game.timeScale,

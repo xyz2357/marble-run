@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FIXED_DT, PhysicsWorld } from '../physics/world';
 import { AudioEngine, type MarbleAudioState } from './audio';
-import { spawnMarble, removeMarble, type Marble } from './marble';
+import { spawnMarble, removeMarble, type Marble, type MarbleShape } from './marble';
 import { Track } from './track';
 import type { MarbleInfo } from '../pieces/types';
 
@@ -40,6 +40,8 @@ export class Game {
   follow = false;
   /** Keep spawning a marble every AUTO_INTERVAL seconds. */
   autoSpawn = false;
+  /** Shape used for newly spawned marbles. */
+  marbleShape: MarbleShape = 'ball';
   /** Extra status text appended to the HUD (set by the editor). */
   hudExtra = '';
   /** Called once per frame before rendering (the editor hooks in here). */
@@ -80,6 +82,12 @@ export class Game {
 
     this.physics = new PhysicsWorld();
     this.hud = document.getElementById('hud');
+    try {
+      const saved = localStorage.getItem('marble-run.shape');
+      if (saved === 'egg' || saved === 'ball') this.marbleShape = saved;
+    } catch {
+      /* ignore */
+    }
 
     this.setupLights();
     this.setupGround();
@@ -176,16 +184,16 @@ export class Game {
 
   /** Spawn one marble at every start piece. Returns the marbles created. */
   spawnAtStart(): Marble[] {
-    return this.track.spawnPoints().map((p) => this.spawnMarble(p));
+    return this.track.spawnPoints().map((p) => this.spawnMarble(p.pos, undefined, p.dir));
   }
 
-  spawnMarble(pos: THREE.Vector3Like, color?: number): Marble {
+  spawnMarble(pos: THREE.Vector3Like, color?: number, heading?: THREE.Vector3): Marble {
     if (this.marbles.length >= MAX_MARBLES) {
       const oldest = this.marbles.find((m) => m.finishTime !== null) ?? this.marbles[0];
       this.removeOne(oldest);
     }
     const c = color ?? MARBLE_COLORS[this.colorIndex++ % MARBLE_COLORS.length];
-    const m = spawnMarble(this.physics, this.scene, pos, c, this.simTime);
+    const m = spawnMarble(this.physics, this.scene, pos, c, this.simTime, this.marbleShape, heading);
     this.marbles.push(m);
     this.onRaceChange?.();
     return m;
@@ -194,6 +202,16 @@ export class Game {
   /** Queue n marbles per start piece, released one after another. */
   spawnBurst(n: number, interval = BURST_INTERVAL): void {
     for (let i = 0; i < n; i++) this.spawnQueue.push(this.simTime + i * interval);
+  }
+
+  setMarbleShape(shape: MarbleShape): void {
+    this.marbleShape = shape;
+    try {
+      localStorage.setItem('marble-run.shape', shape);
+    } catch {
+      /* ignore */
+    }
+    this.onRaceChange?.();
   }
 
   setAutoSpawn(on: boolean): void {
