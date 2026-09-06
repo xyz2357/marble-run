@@ -58,6 +58,14 @@ function eggProfile(): THREE.Vector2[] {
 const eggGeo = new THREE.LatheGeometry(eggProfile(), 28);
 eggGeo.computeVertexNormals();
 
+/**
+ * Egg skin: the user's egg photo baked onto the lathe's UV layout by
+ * scratch/make_egg_skin.py (face on the front half, shell colour elsewhere).
+ */
+const eggTexture = new THREE.TextureLoader().load('/textures/egg-skin.png');
+eggTexture.colorSpace = THREE.SRGBColorSpace;
+eggTexture.anisotropy = 4;
+
 /** Unique vertex positions of the egg for its convex hull collider. */
 const eggHullPoints = (() => {
   const p = eggGeo.getAttribute('position');
@@ -122,9 +130,10 @@ export function spawnMarble(
     const along = heading ? heading.clone().setY(0).normalize() : new THREE.Vector3(1, 0, 0);
     // After the X rotation the long axis (local Y) points along Z; yaw it to be perpendicular to `along`.
     const yaw = Math.atan2(along.z, -along.x) + (Math.random() - 0.5) * 0.3;
+    // Rx(-90) turns the egg's local +Z (the face) to point up, so a fresh egg shows its face.
     rot = new THREE.Quaternion()
       .setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
   } else {
     rot = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, 0));
   }
@@ -143,13 +152,17 @@ export function spawnMarble(
     .setDensity(2.5);
   const collider = pw.world.createCollider(colDesc, body);
 
-  const mat = new THREE.MeshPhysicalMaterial({
-    map: swirlTexture(color),
-    roughness: 0.12,
-    metalness: 0.0,
-    clearcoat: 1,
-    clearcoatRoughness: 0.08,
-  });
+  // Glass ball with a colour swirl; eggs get the photo skin and a matte eggshell finish.
+  const mat =
+    shape === 'egg'
+      ? new THREE.MeshPhysicalMaterial({ map: eggTexture, roughness: 0.55, metalness: 0, clearcoat: 0.15, clearcoatRoughness: 0.5 })
+      : new THREE.MeshPhysicalMaterial({
+          map: swirlTexture(color),
+          roughness: 0.12,
+          metalness: 0.0,
+          clearcoat: 1,
+          clearcoatRoughness: 0.08,
+        });
   const mesh = new THREE.Mesh(shape === 'egg' ? eggGeo : sphereGeo, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
