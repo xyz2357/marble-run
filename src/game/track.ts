@@ -40,6 +40,21 @@ export const MATERIALS: Record<MaterialKey, THREE.Material> = {
   goal: new THREE.MeshStandardMaterial({ color: 0x3ec46d, roughness: 0.7, side: THREE.DoubleSide }),
 };
 
+const colouredCache = new Map<string, THREE.Material>();
+
+/** Shared material for a part, or a cached per-colour variant when the part sets `color`. */
+export function materialFor(part: { material: MaterialKey; color?: number }): THREE.Material {
+  if (part.color === undefined) return MATERIALS[part.material];
+  const key = `${part.material}:${part.color}`;
+  let m = colouredCache.get(key);
+  if (!m) {
+    m = (MATERIALS[part.material] as THREE.MeshStandardMaterial).clone();
+    (m as THREE.MeshStandardMaterial).color.set(part.color);
+    colouredCache.set(key, m);
+  }
+  return m;
+}
+
 /** Holds all placed pieces: their meshes, static physics bodies, spawn points and goals. */
 export class Track {
   readonly pieces: TrackPieceInstance[] = [];
@@ -63,7 +78,7 @@ export class Track {
     group.position.copy(origin);
     group.quaternion.copy(quat);
     for (const part of built.parts) {
-      const mesh = new THREE.Mesh(part.geometry, MATERIALS[part.material]);
+      const mesh = new THREE.Mesh(part.geometry, materialFor(part));
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);

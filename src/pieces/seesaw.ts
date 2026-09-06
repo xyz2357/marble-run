@@ -3,10 +3,10 @@ import * as THREE from 'three';
 import { boxGeo, mergeGeometries } from '../geometry/sweep';
 import { H, v3, type BuiltPiece, type Mechanism, type MechanismContext, type PieceDef } from './types';
 
-const PIVOT_Y = 0.55;
-const HALF_LEN = 1.4;
-const TIP = THREE.MathUtils.degToRad(21); // exit end down: 0.55 - 1.4 sin 21 = 0.05
-const REST = THREE.MathUtils.degToRad(2); // entry end slightly down at rest
+const PIVOT_Y = 0.5;
+const HALF_LEN = 1.42;
+const TIP = Math.asin((PIVOT_Y - 0.03) / 1.42); // tipped exit end stops 3 cm above the next deck (no wedging in the gap)
+const REST = 0; // level at rest (the counterweight holds it against this limit): a crawling marble still reaches the pivot
 
 /** Plank geometry in the plank's own frame (deck top at y=0, pivot at the origin). */
 function plankGeometry(): THREE.BufferGeometry {
@@ -70,7 +70,8 @@ export const seesawDef: PieceDef = {
     { pos: v3(1.5, 0, 0), dir: v3(1, 0, 0), kind: 'out' },
   ],
   build(): BuiltPiece {
-    const post = boxGeo(v3(0, 0.22, 0), v3(0.05, 0.22, 0.3));
+    // Post top must stay below the plank's underside (PIVOT_Y - 0.08, minus the tilt dip over the post width).
+    const post = boxGeo(v3(0, 0.19, 0), v3(0.05, 0.19, 0.3));
     const base = boxGeo(v3(0, 0.02, 0), v3(0.3, 0.02, 0.4));
     const axle = new THREE.CylinderGeometry(0.03, 0.03, 0.8, 12);
     axle.rotateX(Math.PI / 2);

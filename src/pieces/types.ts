@@ -25,6 +25,8 @@ export interface MeshPart {
    */
   geometry: THREE.BufferGeometry;
   material: MaterialKey;
+  /** Optional explicit colour (overrides the material's colour, keeps its finish). */
+  color?: number;
   /** false => visual only, no collider */
   collide?: boolean;
 }

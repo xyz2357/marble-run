@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MATERIALS } from '../game/track';
+import { materialFor } from '../game/track';
 import type { PieceDef } from '../pieces/types';
 
 /** Render a small preview image of each piece into its own canvas. */
@@ -21,7 +21,7 @@ export function renderThumbnails(defs: PieceDef[], size: number): Map<string, HT
     const group = new THREE.Group();
     const built = def.build();
     const parts = [...built.parts, ...(built.preview ?? [])];
-    for (const part of parts) group.add(new THREE.Mesh(part.geometry, MATERIALS[part.material]));
+    for (const part of parts) group.add(new THREE.Mesh(part.geometry, materialFor(part)));
     scene.add(group);
 
     const box = new THREE.Box3().setFromObject(group);
