@@ -120,7 +120,8 @@ export function spawnMarble(
   let rot: THREE.Quaternion;
   if (shape === 'egg') {
     const along = heading ? heading.clone().setY(0).normalize() : new THREE.Vector3(1, 0, 0);
-    const yaw = Math.atan2(along.x, along.z) + (Math.random() - 0.5) * 0.3; // long axis (local Y) -> perpendicular to travel
+    // After the X rotation the long axis (local Y) points along Z; yaw it to be perpendicular to `along`.
+    const yaw = Math.atan2(along.z, -along.x) + (Math.random() - 0.5) * 0.3;
     rot = new THREE.Quaternion()
       .setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
