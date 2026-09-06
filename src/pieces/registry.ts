@@ -10,10 +10,13 @@ import {
   straightDef,
 } from './basic';
 import { funnelDef } from './funnel';
+import { gateDef } from './gate';
 import { helixDef } from './helix';
+import { liftDef } from './lift';
 import { seesawDef } from './seesaw';
 import { mergeDef, splitterDef } from './splitter';
 import { vortexDef } from './vortex';
+import { xylophoneDef } from './xylophone';
 import type { PieceDef } from './types';
 
 const defs: PieceDef[] = [
@@ -34,6 +37,10 @@ const defs: PieceDef[] = [
   splitterDef,
   mergeDef,
   seesawDef,
+  liftDef(6),
+  liftDef(10),
+  gateDef,
+  xylophoneDef,
 ];
 
 export const PIECES: ReadonlyMap<string, PieceDef> = new Map(defs.map((d) => [d.id, d]));

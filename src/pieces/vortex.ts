@@ -21,6 +21,9 @@ export const vortexDef: PieceDef = {
   build() {
     const chuteY = -4 * H; // -2.0
     const rimR = 1.7;
+    // The whole bowl sits this far below the entry track, so an orbiting marble cannot roll back
+    // out through the entry channel.
+    const rimY = -0.06;
     // Convex rim fillet (radius 0.6, marbles up to ~2.4 m/s stay in contact) rolling over into a
     // 27-degree cone. A 2.3 m/s marble orbits where v^2 / r = g * slope, i.e. around r = 1.1.
     const filletR = 0.6;
@@ -64,6 +67,7 @@ export const vortexDef: PieceDef = {
     ];
     // Listed rim -> inwards/downwards -> shell back out: this orientation already gives normals that
     // face into the bowl (see funnel.ts for the opposite case), so no reversal here.
+    for (const pt of pts) pt.y += rimY;
     const bowl = new THREE.LatheGeometry(pts, 72);
     bowl.computeVertexNormals();
 
@@ -72,22 +76,22 @@ export const vortexDef: PieceDef = {
     const theta = THREE.MathUtils.degToRad(60);
     const ease = (t: number) => t * t * (3 - 2 * t);
     const dease = (t: number) => 6 * t * (1 - t);
-    const drop = -0.01;
+    const drop = 0; // lead-in stays level; the bowl rim is rimY below it
     const leadIn = sweep(arcPath(v3(-2.5, 0, 1), 1, 0, theta, 1, (t) => ({ y: drop * ease(t), dy: drop * dease(t) })), 16);
 
     // Rim lip with a gap where the lead-in crosses. Lathe angle phi -> (r sin phi, y, r cos phi).
     const release = v3(-2.5 + Math.sin(theta), 0, 1 - Math.cos(theta));
     const phiEntry = Math.atan2(-2.5, 0); // -pi/2
     const phiRelease = Math.atan2(release.x, release.z);
-    const halfW = 0.36 / rimR + 0.04;
+    const halfW = 0.37 / rimR; // gap exactly as wide as the lead-in track (its rails block the rest)
     const gapStart = Math.min(phiEntry, phiRelease) - halfW;
     const gapEnd = Math.max(phiEntry, phiRelease) + halfW;
     const lipPts = [
-      new THREE.Vector2(rimR - lipW, -0.02),
-      new THREE.Vector2(rimR - lipW, lipH),
-      new THREE.Vector2(rimR + lipW, lipH),
-      new THREE.Vector2(rimR + lipW, -0.08),
-      new THREE.Vector2(rimR - lipW, -0.02),
+      new THREE.Vector2(rimR - lipW, rimY - 0.02),
+      new THREE.Vector2(rimR - lipW, rimY + lipH),
+      new THREE.Vector2(rimR + lipW, rimY + lipH),
+      new THREE.Vector2(rimR + lipW, rimY - 0.08),
+      new THREE.Vector2(rimR - lipW, rimY - 0.02),
     ];
     lipPts.reverse();
     const lip = new THREE.LatheGeometry(lipPts, 72, gapEnd, Math.PI * 2 - (gapEnd - gapStart));

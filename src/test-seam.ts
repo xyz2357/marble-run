@@ -60,7 +60,7 @@ export function installTestSeam(game: Game, editor: Editor): void {
       const t = m.body.translation();
       return { id: m.id, x: t.x, y: t.y, z: t.z };
     },
-    audioStats: () => ({ available: game.audio.available, state: game.audio.state, muted: game.audio.muted, impacts: game.audio.impactCount, detected: game.audio.impactsDetected }),
+    audioStats: () => ({ available: game.audio.available, state: game.audio.state, muted: game.audio.muted, impacts: game.audio.impactCount, detected: game.audio.impactsDetected, notes: game.audio.notesPlayed }),
     /** Offline-render the marble sounds and return spectral centroids (Hz) of the impact and rolling parts. */
     audioPreview: async () => {
       const { samples, sampleRate, impactEnd } = await AudioEngine.renderPreview();
@@ -125,7 +125,7 @@ export function installTestSeam(game: Game, editor: Editor): void {
       game.track.load(data);
       game.frameTrack();
     },
-    loadDemo: () => editor.loadDemo(),
+    loadDemo: (which: 1 | 2 = 1) => editor.loadDemo(which),
     frameTrack: () => game.frameTrack(),
     /** Orthographic-like top view over a point (debugging geometry). */
     topView: (x: number, z: number, height: number) => {

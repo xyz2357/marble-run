@@ -157,8 +157,13 @@ export class Track {
     return m;
   }
 
-  /** True if the piece can be placed without overlapping existing pieces (optionally ignoring one). */
+  /**
+   * True if the piece can be placed: nothing of it below the ground (level >= 0 and every port at or
+   * above y = 0) and no overlap with existing pieces (optionally ignoring one).
+   */
   canPlace(def: PieceDef, placed: PlacedPiece, ignore?: TrackPieceInstance): boolean {
+    if (placed.level < 0) return false;
+    if (worldPorts(def, placed).some((p) => p.pos.y < -1e-6)) return false;
     const occ = this.occupiedMap();
     return slotKeys(def, placed).every((k) => {
       const hit = occ.get(k);
@@ -274,12 +279,19 @@ export class ChainBuilder {
     return this;
   }
 
+  /** Continue from a specific port of an already placed piece. */
+  from(inst: TrackPieceInstance, portIndex: number): this {
+    this.exit = worldPorts(inst.def, inst.placed)[portIndex] ?? null;
+    return this;
+  }
+
   /** Append a piece, snapping its entry to the current exit. */
   add(defId: string, opts: { entryPort?: number; exitPort?: number } = {}): this {
     if (!this.exit) throw new Error('ChainBuilder: no open exit');
     const def = getPiece(defId);
     const placed = snapToPort(def, this.exit, opts.entryPort);
     if (!placed) throw new Error(`ChainBuilder: cannot snap ${defId} to exit at ${this.exit.pos.toArray()}`);
+    if (!this.track.canPlace(def, placed)) throw new Error(`ChainBuilder: ${defId} at ${JSON.stringify(placed)} overlaps or goes underground`);
     const inst = this.track.place(placed);
     this.placed.push(placed);
     const ports = worldPorts(inst.def, placed);

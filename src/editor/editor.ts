@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from '../game/game';
-import { buildDemoTrack } from '../game/demo';
+import { buildDemoTrack, buildMechanismDemo } from '../game/demo';
 import { snapSolutions, type TrackPieceInstance } from '../game/track';
 import { getPiece, listPieces, PIECES } from '../pieces/registry';
 import { CELL, H, worldPorts, type PieceDef, type PlacedPiece, type WorldPort } from '../pieces/types';
@@ -308,10 +308,11 @@ export class Editor {
     this.afterMutation();
   }
 
-  loadDemo(): void {
+  loadDemo(which: 1 | 2 = 1): void {
     this.pushUndo();
     this.game.track.clear();
-    buildDemoTrack(this.game.track);
+    if (which === 2) buildMechanismDemo(this.game.track);
+    else buildDemoTrack(this.game.track);
     this.game.frameTrack();
     this.afterMutation();
   }

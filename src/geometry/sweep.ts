@@ -6,93 +6,35 @@ export type PathFn = (t: number) => { pos: THREE.Vector3; tan: THREE.Vector3 };
 /** Closed 2D profile in (side, up) coordinates, counter-clockwise. */
 export type Profile = [number, number][];
 
+export const TRACK_HALF_WIDTH = 0.36;
+export const RAIL_HEIGHT = 0.22;
+/** Radius of the trough's circular floor; the marble (r = 0.15) self-centres in it. */
+export const TROUGH_RADIUS = 0.45;
+/** Half-width of the trough opening (inner faces of the rails). */
+export const TROUGH_HALF = 0.3;
+
+/** Height of the trough floor at lateral offset s (0 at the centre, rising towards the rails). */
+export function troughY(s: number): number {
+  const c = Math.min(Math.abs(s), TROUGH_HALF);
+  return TROUGH_RADIUS - Math.sqrt(TROUGH_RADIUS * TROUGH_RADIUS - c * c);
+}
+
+/** Lateral sample positions of the trough floor, from +TROUGH_HALF to -TROUGH_HALF. */
+export const TROUGH_SAMPLES = [0.3, 0.225, 0.15, 0.075, 0, -0.075, -0.15, -0.225, -0.3];
+
 /**
- * Standard U-shaped track profile. Inner deck 0.6 wide with chamfers,
- * rails 0.2 tall, 0.06 thick, deck 0.08 thick. Marble radius is 0.15.
+ * Standard track profile: a rounded trough (circular arc, radius 0.45) between
+ * two rails. Deck top is at u = 0 in the centre, the base 0.08 below. Closed, CCW.
  */
 export const TRACK_PROFILE: Profile = [
-  [-0.36, 0.2],
-  [-0.36, -0.08],
-  [0.36, -0.08],
-  [0.36, 0.2],
-  [0.3, 0.2],
-  [0.3, 0.06],
-  [0.16, 0.0],
-  [-0.16, 0.0],
-  [-0.3, 0.06],
-  [-0.3, 0.2],
+  [-TRACK_HALF_WIDTH, RAIL_HEIGHT],
+  [-TRACK_HALF_WIDTH, -0.08],
+  [TRACK_HALF_WIDTH, -0.08],
+  [TRACK_HALF_WIDTH, RAIL_HEIGHT],
+  [TROUGH_HALF, RAIL_HEIGHT],
+  ...TROUGH_SAMPLES.map((s) => [s, troughY(s)] as [number, number]),
+  [-TROUGH_HALF, RAIL_HEIGHT],
 ];
-
-export const TRACK_HALF_WIDTH = 0.36;
-export const RAIL_HEIGHT = 0.2;
-
-/** Deck plus the rail on the -side only (used for the outer side of a branch). Closed, CCW. */
-export const HALF_PROFILE_LEFT: Profile = [
-  [-0.36, 0.2],
-  [-0.36, -0.08],
-  [0.24, -0.08],
-  [0.24, 0.0],
-  [-0.16, 0.0],
-  [-0.3, 0.06],
-  [-0.3, 0.2],
-];
-/** Mirror of HALF_PROFILE_LEFT: deck plus the rail on the +side. */
-export const HALF_PROFILE_RIGHT: Profile = [...HALF_PROFILE_LEFT].reverse().map(([s, u]) => [-s, u] as [number, number]);
-/** Just a rail on the +side (an inner divider rail). */
-export const RAIL_PROFILE_RIGHT: Profile = [
-  [0.24, 0.2],
-  [0.24, -0.08],
-  [0.36, -0.08],
-  [0.36, 0.2],
-];
-export const RAIL_PROFILE_LEFT: Profile = [...RAIL_PROFILE_RIGHT].reverse().map(([s, u]) => [-s, u] as [number, number]);
-
-/** Triangulate a profile for an end cap, tolerating coincident consecutive points (collapsed features). */
-function capTriangles(profile: Profile): [number, number, number][] {
-  const map: number[] = [];
-  const pts: THREE.Vector2[] = [];
-  for (let i = 0; i < profile.length; i++) {
-    const [s, u] = profile[i];
-    const prev = pts[pts.length - 1];
-    if (prev && Math.abs(prev.x - s) < 1e-6 && Math.abs(prev.y - u) < 1e-6) continue;
-    pts.push(new THREE.Vector2(s, u));
-    map.push(i);
-  }
-  if (pts.length > 1 && Math.abs(pts[0].x - pts[pts.length - 1].x) < 1e-6 && Math.abs(pts[0].y - pts[pts.length - 1].y) < 1e-6) {
-    pts.pop();
-    map.pop();
-  }
-  if (pts.length < 3) return [];
-  return THREE.ShapeUtils.triangulateShape(pts, []).map(([a, b, c]) => [map[a], map[b], map[c]] as [number, number, number]);
-}
-
-/** Point-wise blend of two profiles with the same vertex count. */
-export function lerpProfile(a: Profile, b: Profile, t: number): Profile {
-  return a.map(([s, u], i) => [s + (b[i][0] - s) * t, u + (b[i][1] - u) * t] as [number, number]);
-}
-
-/** Cubic Bezier path (tangent from the derivative). */
-export function bezierPath(p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3): PathFn {
-  return (t) => {
-    const u = 1 - t;
-    const pos = new THREE.Vector3()
-      .addScaledVector(p0, u * u * u)
-      .addScaledVector(p1, 3 * u * u * t)
-      .addScaledVector(p2, 3 * u * t * t)
-      .addScaledVector(p3, t * t * t);
-    const tan = new THREE.Vector3()
-      .addScaledVector(new THREE.Vector3().subVectors(p1, p0), 3 * u * u)
-      .addScaledVector(new THREE.Vector3().subVectors(p2, p1), 6 * u * t)
-      .addScaledVector(new THREE.Vector3().subVectors(p3, p2), 3 * t * t)
-      .normalize();
-    return { pos, tan };
-  };
-}
-
-/** Re-parameterize a path to the sub-range [t0, t1]. */
-export function pathSub(path: PathFn, t0: number, t1: number): PathFn {
-  return (t) => path(t0 + (t1 - t0) * t);
-}
 
 const Y_UP = new THREE.Vector3(0, 1, 0);
 
@@ -266,4 +208,51 @@ export function trimeshArrays(geo: THREE.BufferGeometry): { vertices: Float32Arr
   const indices = new Uint32Array(idx.count);
   for (let i = 0; i < idx.count; i++) indices[i] = idx.getX(i);
   return { vertices, indices };
+}
+
+/** Triangulate a profile for an end cap, tolerating coincident consecutive points (collapsed features). */
+function capTriangles(profile: Profile): [number, number, number][] {
+  const map: number[] = [];
+  const pts: THREE.Vector2[] = [];
+  for (let i = 0; i < profile.length; i++) {
+    const [s, u] = profile[i];
+    const prev = pts[pts.length - 1];
+    if (prev && Math.abs(prev.x - s) < 1e-6 && Math.abs(prev.y - u) < 1e-6) continue;
+    pts.push(new THREE.Vector2(s, u));
+    map.push(i);
+  }
+  if (pts.length > 1 && Math.abs(pts[0].x - pts[pts.length - 1].x) < 1e-6 && Math.abs(pts[0].y - pts[pts.length - 1].y) < 1e-6) {
+    pts.pop();
+    map.pop();
+  }
+  if (pts.length < 3) return [];
+  return THREE.ShapeUtils.triangulateShape(pts, []).map(([a, b, c]) => [map[a], map[b], map[c]] as [number, number, number]);
+}
+
+/** Point-wise blend of two profiles with the same vertex count. */
+export function lerpProfile(a: Profile, b: Profile, t: number): Profile {
+  return a.map(([s, u], i) => [s + (b[i][0] - s) * t, u + (b[i][1] - u) * t] as [number, number]);
+}
+
+/** Cubic Bezier path (tangent from the derivative). */
+export function bezierPath(p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3): PathFn {
+  return (t) => {
+    const u = 1 - t;
+    const pos = new THREE.Vector3()
+      .addScaledVector(p0, u * u * u)
+      .addScaledVector(p1, 3 * u * u * t)
+      .addScaledVector(p2, 3 * u * t * t)
+      .addScaledVector(p3, t * t * t);
+    const tan = new THREE.Vector3()
+      .addScaledVector(new THREE.Vector3().subVectors(p1, p0), 3 * u * u)
+      .addScaledVector(new THREE.Vector3().subVectors(p2, p1), 6 * u * t)
+      .addScaledVector(new THREE.Vector3().subVectors(p3, p2), 3 * t * t)
+      .normalize();
+    return { pos, tan };
+  };
+}
+
+/** Re-parameterize a path to the sub-range [t0, t1]. */
+export function pathSub(path: PathFn, t0: number, t1: number): PathFn {
+  return (t) => path(t0 + (t1 - t0) * t);
 }

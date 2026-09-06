@@ -215,6 +215,34 @@ export class AudioEngine {
     }
   }
 
+  /** Number of xylophone notes requested (for tests). */
+  notesPlayed = 0;
+
+  /** A struck xylophone-bar note (two decaying partials). Used by the xylophone piece. */
+  note(freq: number, strength = 0.6): void {
+    this.notesPlayed++;
+    if (!this.ctx || !this.master || this.ctx.state !== 'running') return;
+    const now = this.ctx.currentTime;
+    for (const [ratio, amp, decay] of [
+      [1, 0.5, 0.5],
+      [2.76, 0.18, 0.18],
+    ] as const) {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq * ratio;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(amp * strength, now);
+      g.gain.exponentialRampToValueAtTime(0.0005, now + decay);
+      osc.connect(g).connect(this.master);
+      osc.start(now);
+      osc.stop(now + decay + 0.02);
+      osc.onended = () => {
+        osc.disconnect();
+        g.disconnect();
+      };
+    }
+  }
+
   /**
    * Render a short preview offline (for tests / tuning): three impacts followed by
    * one second of rolling at 3 m/s. Returns the mono samples and sample rate.

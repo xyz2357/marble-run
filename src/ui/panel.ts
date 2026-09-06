@@ -35,7 +35,8 @@ export function createPanel(editor: Editor, game: Game): void {
         <button data-action="frame" title="F">看全图</button>
       </div>
       <div class="group">
-        <button data-action="demo">示例轨道</button>
+        <button data-action="demo">示例 1</button>
+        <button data-action="demo2" title="机关演示：电梯、木琴、跷跷板、闸门、分叉、漩涡">示例 2</button>
         <button data-action="clear" class="danger">清空</button>
       </div>
       <div class="group">
@@ -127,7 +128,10 @@ export function createPanel(editor: Editor, game: Game): void {
           game.frameTrack();
           break;
         case 'demo':
-          if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo();
+          if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo(1);
+          break;
+        case 'demo2':
+          if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo(2);
           break;
         case 'clear':
           if (game.track.pieces.length === 0 || confirm('清空整条轨道？（可撤销）')) editor.clear();

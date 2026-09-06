@@ -64,6 +64,8 @@ export function spawnMarble(pw: PhysicsWorld, scene: THREE.Scene, pos: THREE.Vec
   const rbDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(pos.x, pos.y, pos.z)
     .setCcdEnabled(true)
+    // Marbles must never sleep: a gate or lift moving away from a resting marble would not wake it.
+    .setCanSleep(false)
     .setLinearDamping(0.05)
     .setAngularDamping(0.15);
   const body = pw.world.createRigidBody(rbDesc);

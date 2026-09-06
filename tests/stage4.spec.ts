@@ -53,9 +53,9 @@ test('splitter alternates marbles between its two exits', async ({ page }) => {
   const errors = await loadTrack(page, [
     { def: 'start', cell: { x: 0, z: 0 }, level: 6, rot: 0 },
     { def: 'slope', cell: { x: 1, z: 0 }, level: 5, rot: 0 },
-    { def: 'splitter', cell: { x: 3, z: 0 }, level: 5, rot: 0 },
-    { def: 'end', cell: { x: 6, z: 1 }, level: 5, rot: 0 },
-    { def: 'end', cell: { x: 6, z: -1 }, level: 5, rot: 0 },
+    { def: 'splitter', cell: { x: 3, z: 0 }, level: 4, rot: 0 },
+    { def: 'end', cell: { x: 6, z: 1 }, level: 4, rot: 0 },
+    { def: 'end', cell: { x: 6, z: -1 }, level: 4, rot: 0 },
   ]);
   // A mechanical toggle needs the previous marble to clear the flap first: space them 1.2 s apart.
   await page.evaluate(() => {
@@ -89,9 +89,9 @@ test('merge joins two entries into one exit', async ({ page }) => {
     { def: 'straight', cell: { x: 4, z: 1 }, level: 4, rot: 0 },
     { def: 'straight', cell: { x: 3, z: 1 }, level: 4, rot: 0 },
     { def: 'start', cell: { x: 3, z: -1 }, level: 4, rot: 2 },
-    { def: 'merge', cell: { x: 0, z: 0 }, level: 4, rot: 0 },
-    { def: 'slope', cell: { x: -1, z: 0 }, level: 3, rot: 2 },
-    { def: 'end', cell: { x: -3, z: 0 }, level: 3, rot: 2 },
+    { def: 'merge', cell: { x: 0, z: 0 }, level: 3, rot: 0 },
+    { def: 'slope', cell: { x: -1, z: 0 }, level: 2, rot: 2 },
+    { def: 'end', cell: { x: -3, z: 0 }, level: 2, rot: 2 },
   ]);
   expect(await page.evaluate(() => window.__TEST__.marbles().length)).toBe(2);
   const trail: string[] = [];
