@@ -1,6 +1,6 @@
 import { PIECE_KEYS, type Editor } from '../editor/editor';
 import type { Game } from '../game/game';
-import { listPieces } from '../pieces/registry';
+import { paletteDefs, PIECES, sameFamily, variantsOf } from '../pieces/registry';
 import { createPlayBar } from './playbar';
 import { renderThumbnails } from './thumbs';
 
@@ -37,6 +37,7 @@ export function createPanel(editor: Editor, game: Game): void {
       <div class="group">
         <button data-action="demo">示例 1</button>
         <button data-action="demo2" title="机关演示：电梯、木琴、跷跷板、闸门、分叉、漩涡">示例 2</button>
+        <button data-action="demo3" title="三圈螺旋、弹簧跳台、水车、随机分叉">示例 3</button>
         <button data-action="clear" class="danger">清空</button>
       </div>
       <div class="group">
@@ -45,9 +46,11 @@ export function createPanel(editor: Editor, game: Game): void {
         <input id="import-file" type="file" accept="application/json,.json" hidden />
       </div>
     </div>
+    <div id="variants" hidden><span class="name"></span><span class="buttons"></span></div>
     <div id="palette"></div>
     <div id="picked-panel" hidden>
       <button data-picked="rotate" title="R">旋转</button>
+      <button data-picked="variant" title="V">规格</button>
       <button data-picked="up" class="free-only" title="E">升</button>
       <button data-picked="down" class="free-only" title="Q">降</button>
       <button data-picked="delete" class="danger" title="Delete">删除</button>
@@ -56,8 +59,8 @@ export function createPanel(editor: Editor, game: Game): void {
   `;
 
   const palette = root.querySelector<HTMLDivElement>('#palette')!;
-  const thumbs = renderThumbnails(listPieces(), 72);
-  listPieces().forEach((def, i) => {
+  const thumbs = renderThumbnails(paletteDefs(), 72);
+  paletteDefs().forEach((def, i) => {
     const btn = document.createElement('button');
     btn.className = 'piece';
     btn.dataset.id = def.id;
@@ -72,9 +75,39 @@ export function createPanel(editor: Editor, game: Game): void {
     const label = document.createElement('span');
     label.textContent = def.name;
     btn.appendChild(label);
-    btn.addEventListener('click', () => editor.select(editor.selectedDef?.id === def.id ? null : def.id));
+    btn.addEventListener('click', () => editor.select(sameFamily(editor.selectedDef, def) ? null : def.id));
     palette.appendChild(btn);
   });
+
+  // Variant bar: the members of the picked / selected piece's family (helix turns, lift height...).
+  const variantBar = root.querySelector<HTMLDivElement>('#variants')!;
+  const variantName = variantBar.querySelector<HTMLSpanElement>('.name')!;
+  const variantButtons = variantBar.querySelector<HTMLSpanElement>('.buttons')!;
+  let variantKey = '';
+  const refreshVariants = (): void => {
+    const ctx = editor.mode === 'edit' ? editor.variantContext : null;
+    const vs = ctx ? variantsOf(ctx) : [];
+    variantBar.hidden = vs.length < 2;
+    if (vs.length < 2) {
+      variantKey = '';
+      return;
+    }
+    const key = vs.map((d) => d.id).join(',');
+    if (key !== variantKey) {
+      variantKey = key;
+      variantName.textContent = `${ctx!.name.replace(/[ x×↑].*$/, '')} 规格`;
+      variantButtons.innerHTML = '';
+      for (const d of vs) {
+        const b = document.createElement('button');
+        b.dataset.variant = d.id;
+        b.textContent = d.family!.label;
+        b.title = `${d.name}（V 循环切换）`;
+        b.addEventListener('click', () => editor.setVariant(d.id));
+        variantButtons.appendChild(b);
+      }
+    }
+    variantButtons.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.classList.toggle('active', b.dataset.variant === ctx!.id));
+  };
 
   const fileInput = root.querySelector<HTMLInputElement>('#import-file')!;
   fileInput.addEventListener('change', async () => {
@@ -133,6 +166,9 @@ export function createPanel(editor: Editor, game: Game): void {
         case 'demo2':
           if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo(2);
           break;
+        case 'demo3':
+          if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo(3);
+          break;
         case 'clear':
           if (game.track.pieces.length === 0 || confirm('清空整条轨道？（可撤销）')) editor.clear();
           break;
@@ -151,6 +187,9 @@ export function createPanel(editor: Editor, game: Game): void {
       switch (btn.dataset.picked) {
         case 'rotate':
           editor.rotatePicked();
+          break;
+        case 'variant':
+          editor.cycleVariant();
           break;
         case 'up':
           editor.movePicked(0, 1, 0);
@@ -184,8 +223,10 @@ export function createPanel(editor: Editor, game: Game): void {
   const refresh = (): void => {
     playBar.refresh();
     root.querySelectorAll<HTMLButtonElement>('.piece').forEach((b) => {
-      b.classList.toggle('active', b.dataset.id === editor.selectedDef?.id);
+      b.classList.toggle('active', sameFamily(editor.selectedDef, PIECES.get(b.dataset.id ?? '')));
     });
+    refreshVariants();
+    root.querySelector<HTMLButtonElement>('[data-picked="variant"]')!.hidden = !editor.picked || variantsOf(editor.picked.def).length < 2;
     const setActive = (action: string, on: boolean) => root.querySelector(`[data-action="${action}"]`)!.classList.toggle('active', on);
     setActive('mode-edit', editor.mode === 'edit');
     setActive('mode-play', editor.mode === 'play');

@@ -35,6 +35,7 @@ export function liftDef(levels: number): PieceDef {
   return {
     id: `lift${levels}`,
     name: `电梯 ↑${levels}`,
+    family: { id: 'lift', label: `↑${levels}` },
     footprint: [
       { x: 0, z: 0 },
       { x: 1, z: 0 },

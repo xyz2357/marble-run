@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { Game } from '../game/game';
-import { buildDemoTrack, buildMechanismDemo } from '../game/demo';
+import { buildDemoTrack, buildJumpDemo, buildMechanismDemo } from '../game/demo';
 import { snapSolutions, type TrackPieceInstance } from '../game/track';
-import { getPiece, listPieces, PIECES } from '../pieces/registry';
+import { getPiece, paletteDefs, PIECES, variantsOf } from '../pieces/registry';
 import { CELL, H, worldPorts, type PieceDef, type PlacedPiece, type WorldPort } from '../pieces/types';
 import { Ghost } from './ghost';
 
@@ -11,7 +11,7 @@ export type Mode = 'edit' | 'play';
 export type ToolMode = 'chain' | 'free';
 
 export const AUTOSAVE_KEY = 'marble-run.autosave.v1';
-/** Keyboard shortcuts for the palette, in listPieces() order. */
+/** Keyboard shortcuts for the palette, in paletteDefs() order. */
 export const PIECE_KEYS = '1234567890-=';
 const SNAP_PX = 48;
 const PORT_CLICK_PX = 28;
@@ -176,8 +176,50 @@ export class Editor {
   }
 
   selectByIndex(i: number): void {
-    const defs = listPieces();
+    const defs = paletteDefs();
     if (i >= 0 && i < defs.length) this.select(this.selectedDef?.id === defs[i].id ? null : defs[i].id);
+  }
+
+  /** The piece whose family variants the UI offers: the picked piece, else the one being placed. */
+  get variantContext(): PieceDef | null {
+    return this.picked?.def ?? this.selectedDef;
+  }
+
+  /**
+   * Switch to another member of the current family: swaps the picked piece in place (if the
+   * new size fits), or changes the piece being placed.
+   */
+  setVariant(defId: string): boolean {
+    const def = getPiece(defId);
+    if (this.picked) {
+      if (this.mode !== 'edit') return false;
+      if (this.picked.def.id === defId) return true;
+      const next: PlacedPiece = { ...this.picked.placed, cell: { ...this.picked.placed.cell }, def: defId };
+      if (!this.game.track.canPlace(def, next, this.picked)) return false;
+      this.replacePiece(this.picked, next);
+      return true;
+    }
+    if (this.selectedDef) {
+      this.selectedDef = def;
+      this.snapIndex = 0;
+      this.changed();
+      return true;
+    }
+    return false;
+  }
+
+  /** V key: next member of the current family (wraps). */
+  cycleVariant(dir = 1): boolean {
+    const ctx = this.variantContext;
+    if (!ctx) return false;
+    const vs = variantsOf(ctx);
+    if (vs.length < 2) return false;
+    const i = vs.findIndex((d) => d.id === ctx.id);
+    for (let k = 1; k < vs.length; k++) {
+      const next = vs[(((i + dir * k) % vs.length) + vs.length) % vs.length];
+      if (this.setVariant(next.id)) return true;
+    }
+    return false;
   }
 
   setLevel(level: number): void {
@@ -308,10 +350,11 @@ export class Editor {
     this.afterMutation();
   }
 
-  loadDemo(which: 1 | 2 = 1): void {
+  loadDemo(which: 1 | 2 | 3 = 1): void {
     this.pushUndo();
     this.game.track.clear();
-    if (which === 2) buildMechanismDemo(this.game.track);
+    if (which === 3) buildJumpDemo(this.game.track);
+    else if (which === 2) buildMechanismDemo(this.game.track);
     else buildDemoTrack(this.game.track);
     this.game.frameTrack();
     this.afterMutation();
@@ -623,6 +666,9 @@ export class Editor {
         if (this.picked) this.rotatePicked();
         else this.rotate();
         break;
+      case 'v':
+        this.cycleVariant(e.shiftKey ? -1 : 1);
+        break;
       case 'q':
         if (this.picked && this.toolMode === 'free') this.movePicked(0, -1, 0);
         else this.setLevel(this.level - 1);
@@ -728,7 +774,9 @@ export class Editor {
       const state = this.candidate ? (this.candidate.snapped ? `${this.candidate.closes ? '两端都接上了！' : '吸附'}${this.candidate.alternatives > 1 ? `（${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}` : `自由放置 层 ${this.level} 旋转 ${this.rot * 90}°`) : '';
       line1 = `自由模式  ${tool}  ${state}`;
     }
-    const picked = this.picked ? `  已选中「${this.picked.def.name}」：R 旋转  Delete 删除${this.toolMode === 'free' ? '  Q/E 升降  方向键平移' : ''}` : '';
+    const variants = this.variantContext ? variantsOf(this.variantContext) : [];
+    const variantHint = variants.length > 1 ? `  V 换规格（${this.variantContext!.family!.label}）` : '';
+    const picked = this.picked ? `  已选中「${this.picked.def.name}」：R 旋转  Delete 删除${this.toolMode === 'free' ? '  Q/E 升降  方向键平移' : ''}${variantHint}` : variantHint;
     const line2 =
       this.toolMode === 'chain'
         ? '[1-9] 选零件  [R] 换接法  [Backspace] 撤掉上一块  [点黄点] 换接口  [WASD] 平移  [F] 聚焦  [Tab] 试玩'

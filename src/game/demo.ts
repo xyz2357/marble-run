@@ -38,3 +38,21 @@ export function buildMechanismDemo(track: Track): void {
   const splitter = track.pieces.find((p) => p.placed.def === 'splitter')!;
   b.from(splitter, 2).add('slope').add('slope').add('curve_l').add('end');
 }
+
+/** Demo 3: triple helix -> spring jump -> water wheel -> random splitter -> two ends. */
+export function buildJumpDemo(track: Track): void {
+  const b = new ChainBuilder(track);
+  // Marbles leave the wheel slowly, so both branches after the splitter keep descending.
+  b.begin({ def: 'start', cell: { x: -6, z: 0 }, level: 16, rot: 0 })
+    .add('slope_steep')
+    .add('helix3')
+    .add('jump')
+    .add('slope_steep')
+    .add('wheel')
+    .add('splitter_rnd', { exitPort: 1 })
+    .add('bigcurve_r')
+    .add('slope')
+    .add('end');
+  const splitter = track.pieces.find((p) => p.placed.def === 'splitter_rnd')!;
+  b.from(splitter, 2).add('curve_l').add('slope').add('end');
+}

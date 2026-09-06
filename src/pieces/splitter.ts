@@ -107,7 +107,7 @@ function tiltedOffset(tilt: number): [number, number, number] {
   return [c.x, c.y, c.z];
 }
 
-function makeFlap(ctx: MechanismContext): Mechanism {
+function makeFlap(ctx: MechanismContext, random = false): Mechanism {
   const pivotLocal = FLAP_PIVOT.clone().setY(splitDeckY(FLAP_PIVOT.x));
   const pivotWorld = pivotLocal.clone().applyQuaternion(ctx.quat).add(ctx.origin);
   const body = ctx.world.createRigidBody(
@@ -126,11 +126,13 @@ function makeFlap(ctx: MechanismContext): Mechanism {
   ctx.root.add(mesh);
   ctx.bind(body, mesh);
 
-  // Like a mechanical toggle: the flap only flips once a marble has gone past it,
-  // so it never swings into a marble that is still being deflected.
+  // Like a mechanical toggle: the flap only flips once a marble has gone past it, and
+  // only when no other marble is still in the flap zone (a closely following marble
+  // would otherwise be squeezed between the swinging flap and the rail).
   const zone = new THREE.Box3(v3(-0.6, -0.2, -1.2), v3(FLAP_PIVOT.x + 0.15, 0.9, 1.2));
   const inside = new Set<number>();
-  let side: 1 | -1 = 1; // branch the current flap position sends marbles to (+Z first)
+  let pendingFlip = false;
+  let side: 1 | -1 = random && Math.random() < 0.5 ? -1 : 1; // branch the current flap position sends marbles to
   let angle = -side * FLAP_ANGLE;
   let target = angle;
   const local = new THREE.Vector3();
@@ -146,12 +148,13 @@ function makeFlap(ctx: MechanismContext): Mechanism {
           inside.add(m.id);
         } else if (!now && inside.has(m.id)) {
           inside.delete(m.id);
-          if (local.x > FLAP_PIVOT.x + 0.15) {
-            // Went through: flip for the next marble.
-            side = side === 1 ? -1 : 1;
-            target = -side * FLAP_ANGLE;
-          }
+          if (local.x > FLAP_PIVOT.x + 0.15) pendingFlip = true; // went through: flip for the next marble
         }
+      }
+      if (pendingFlip && inside.size === 0) {
+        pendingFlip = false;
+        side = random ? (Math.random() < 0.5 ? -1 : 1) : side === 1 ? -1 : 1;
+        target = -side * FLAP_ANGLE;
       }
       const speed = 12 * dt;
       angle += THREE.MathUtils.clamp(target - angle, -speed, speed);
@@ -178,6 +181,7 @@ function flapPreview(): THREE.BufferGeometry {
 export const splitterDef: PieceDef = {
   id: 'splitter',
   name: '分叉器',
+  family: { id: 'splitter', label: '交替' },
   footprint: FOOTPRINT,
   heightUnits: 2,
   ports: [
@@ -190,6 +194,21 @@ export const splitterDef: PieceDef = {
       parts: [{ geometry: buildY('split'), material: 'wood' }],
       preview: [{ geometry: flapPreview(), material: 'accent' }],
       mechanisms: [makeFlap],
+    };
+  },
+};
+
+/** Random splitter: same Y and flap, but each marble is sent to a random side. */
+export const splitterRandomDef: PieceDef = {
+  ...splitterDef,
+  id: 'splitter_rnd',
+  name: '随机分叉',
+  family: { id: 'splitter', label: '随机' },
+  build(): BuiltPiece {
+    return {
+      parts: [{ geometry: buildY('split'), material: 'wood' }],
+      preview: [{ geometry: flapPreview(), material: 'accent' }],
+      mechanisms: [(ctx) => makeFlap(ctx, true)],
     };
   },
 };

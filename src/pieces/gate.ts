@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { slopePath, sweep } from '../geometry/sweep';
 import { H, v3, type BuiltPiece, type Mechanism, type MechanismContext, type PieceDef } from './types';
 
-const PERIOD = 3.0;
 const OPEN_FOR = 0.7;
 const GATE_X = 0.25;
 
@@ -14,29 +13,33 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
  * OPEN_FOR seconds every PERIOD seconds, releasing whatever has queued behind it.
  * Handy as a race start or to space marbles out.
  */
-export const gateDef: PieceDef = {
-  id: 'gate',
-  name: '定时闸门',
-  footprint: [{ x: 0, z: 0 }],
-  heightUnits: 2,
-  ports: [
-    { pos: v3(-0.5, H, 0), dir: v3(-1, 0, 0), kind: 'in' },
-    { pos: v3(0.5, 0, 0), dir: v3(1, 0, 0), kind: 'out' },
-  ],
-  build(): BuiltPiece {
-    const path = slopePath(v3(-0.5, H, 0), v3(0.5, 0, 0));
-    const gateY = path((GATE_X + 0.5) / 1).pos.y;
-    const bar = new THREE.BoxGeometry(0.05, 0.34, 0.6);
-    bar.translate(GATE_X, gateY + 0.17, 0);
-    return {
-      parts: [{ geometry: sweep(path, 16), material: 'wood' }],
-      preview: [{ geometry: bar, material: 'accent' }],
-      mechanisms: [(ctx) => makeGate(ctx, gateY)],
-    };
-  },
-};
+export function gateDef(period = 3): PieceDef {
+  const id = period === 3 ? 'gate' : period < 3 ? 'gate_fast' : 'gate_slow';
+  return {
+    id,
+    name: '定时闸门',
+    family: { id: 'gate', label: `${period} s` },
+    footprint: [{ x: 0, z: 0 }],
+    heightUnits: 2,
+    ports: [
+      { pos: v3(-0.5, H, 0), dir: v3(-1, 0, 0), kind: 'in' },
+      { pos: v3(0.5, 0, 0), dir: v3(1, 0, 0), kind: 'out' },
+    ],
+    build(): BuiltPiece {
+      const path = slopePath(v3(-0.5, H, 0), v3(0.5, 0, 0));
+      const gateY = path((GATE_X + 0.5) / 1).pos.y;
+      const bar = new THREE.BoxGeometry(0.05, 0.34, 0.6);
+      bar.translate(GATE_X, gateY + 0.17, 0);
+      return {
+        parts: [{ geometry: sweep(path, 16), material: 'wood' }],
+        preview: [{ geometry: bar, material: 'accent' }],
+        mechanisms: [(ctx) => makeGate(ctx, gateY, period)],
+      };
+    },
+  };
+}
 
-function makeGate(ctx: MechanismContext, gateY: number): Mechanism {
+function makeGate(ctx: MechanismContext, gateY: number, PERIOD: number): Mechanism {
   const body = ctx.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(ctx.origin.x, ctx.origin.y, ctx.origin.z).setRotation(ctx.quat));
   ctx.world.createCollider(RAPIER.ColliderDesc.cuboid(0.025, 0.17, 0.3).setTranslation(GATE_X, gateY + 0.17, 0), body);
   const geo = new THREE.BoxGeometry(0.05, 0.34, 0.6);

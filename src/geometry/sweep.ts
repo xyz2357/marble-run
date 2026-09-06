@@ -47,6 +47,13 @@ export function frameFor(tan: THREE.Vector3): { side: THREE.Vector3; up: THREE.V
   return { side, up };
 }
 
+/** One station of a sweep: position plus the (side, up) frame the profile is laid out in. */
+export interface Station {
+  pos: THREE.Vector3;
+  side: THREE.Vector3;
+  up: THREE.Vector3;
+}
+
 /**
  * Sweep a closed profile along a path, producing an indexed BufferGeometry
  * with end caps. Suitable for both rendering and a Rapier trimesh collider.
@@ -57,6 +64,23 @@ export function sweep(
   profile: Profile | ((t: number) => Profile) = TRACK_PROFILE,
   caps = true,
 ): THREE.BufferGeometry {
+  const stations: Station[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const { pos, tan } = path(i / segments);
+    const { side, up } = frameFor(tan);
+    stations.push({ pos, side, up });
+  }
+  return sweepStations(stations, profile, caps);
+}
+
+/**
+ * Sweep a closed CCW profile through explicit stations. The frame convention is the
+ * one `frameFor` produces: side x up = -tangent (for a +X path: side = +Z, up = +Y),
+ * so callers laying out their own frames must keep that handedness or the
+ * triangles come out inward-facing.
+ */
+export function sweepStations(stations: Station[], profile: Profile | ((t: number) => Profile) = TRACK_PROFILE, caps = true): THREE.BufferGeometry {
+  const segments = stations.length - 1;
   const profileAt = typeof profile === 'function' ? profile : () => profile;
   const n = profileAt(0).length;
   const positions: number[] = [];
@@ -64,8 +88,7 @@ export function sweep(
 
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
-    const { pos, tan } = path(t);
-    const { side, up } = frameFor(tan);
+    const { pos, side, up } = stations[i];
     for (const [s, u] of profileAt(t)) {
       positions.push(
         pos.x + side.x * s + up.x * u,
@@ -99,6 +122,34 @@ export function sweep(
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;
+}
+
+/**
+ * Arc-shaped shell in the XY plane (a casing around a wheel with its axle along Z):
+ * radii rIn..rOut, z in [-halfZ, halfZ], from angle a0 to a1 (radians, CCW from +X).
+ * Outward-facing regardless of the angle order.
+ */
+export function ringShell(center: THREE.Vector3, rIn: number, rOut: number, halfZ: number, a0: number, a1: number, segments: number): THREE.BufferGeometry {
+  // Frame handedness (see sweepStations): with side = +Z and up = radial, the tangent must be
+  // -theta_hat, i.e. the stations must run in DEcreasing angle.
+  const from = Math.max(a0, a1);
+  const to = Math.min(a0, a1);
+  const stations: Station[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const th = from + ((to - from) * i) / segments;
+    stations.push({
+      pos: center.clone(),
+      side: new THREE.Vector3(0, 0, 1),
+      up: new THREE.Vector3(Math.cos(th), Math.sin(th), 0),
+    });
+  }
+  const profile: Profile = [
+    [-halfZ, rOut],
+    [-halfZ, rIn],
+    [halfZ, rIn],
+    [halfZ, rOut],
+  ];
+  return sweepStations(stations, profile, true);
 }
 
 /** Straight line from a to b. */

@@ -78,6 +78,12 @@
     #race li .time { margin-left: auto; }
     #race .empty { color: var(--muted); }
 
+    #variants { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px;
+      padding: 4px 8px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; font-size: 13px; }
+    #variants .name { color: var(--muted); margin-right: 4px; }
+    #variants button { background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+    #variants button:hover { background: rgba(255,255,255,0.08); }
+    #variants button.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
     #palette { position: fixed; top: 64px; left: 12px; bottom: 96px; width: 104px; overflow-y: auto; display: flex;
                flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--panel-border);
                border-radius: 10px; backdrop-filter: blur(6px); scrollbar-width: thin; }

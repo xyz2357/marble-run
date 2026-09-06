@@ -76,6 +76,12 @@ export interface PieceDef {
   /** Vertical extent in H units above the anchor level (informational). */
   heightUnits: number;
   ports: PortDef[];
+  /**
+   * Pieces that are the same thing in different sizes / settings (helix x1/x2/x3, lift heights)
+   * share a family: the palette shows one entry per family and the editor switches between
+   * members with V / the variant bar. `label` names this member.
+   */
+  family?: { id: string; label: string };
   build(): BuiltPiece;
 }
 

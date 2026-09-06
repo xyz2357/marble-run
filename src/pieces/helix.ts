@@ -19,6 +19,7 @@ export function helixDef(turns = 1): PieceDef {
   return {
     id: turns === 1 ? 'helix' : `helix${turns}`,
     name: turns === 1 ? '螺旋' : `螺旋x${turns}`,
+    family: { id: 'helix', label: `×${turns}` },
     footprint: [-1, 0, 1].flatMap((x) => [-1, 0, 1].map((zz) => ({ x, z: zz }))),
     heightUnits: dropUnits + 1,
     ports: [
