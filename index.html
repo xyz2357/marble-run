@@ -133,6 +133,45 @@
     #palette .piece canvas { width: 72px; height: 72px; border-radius: 6px; background: rgba(159, 197, 232, 0.35); }
     #palette .piece kbd { position: absolute; top: 8px; left: 8px; font: 11px/1 ui-monospace, monospace; color: var(--accent-text);
                           background: var(--accent); border-radius: 4px; padding: 2px 4px; opacity: 0.9; }
+
+    /* ---------------------------------------------------------------- touch */
+    /* Fingers need bigger targets, and every keyboard hint is dead weight. */
+    @media (pointer: coarse) {
+      #toolbar button, #toolbar select { padding: 9px 12px; font-size: 14px; }
+      #playbar button { padding: 10px 14px; font-size: 14px; }
+      #picked-panel button { padding: 8px 13px; font-size: 13px; }
+      #variants button { padding: 7px 12px; }
+      kbd { display: none !important; }
+    }
+
+    /* Phone layout. The bars are centred and as wide as they like on a desktop, which puts half
+       of each one off both edges of a 412px screen - including the edit/play switch. Here they
+       span the screen and scroll sideways instead; touch-action has to allow that, since the
+       body blocks default gestures so a drag rotates the camera. */
+    @media (max-width: 760px) {
+      #toolbar, #playbar { left: 6px; right: 6px; transform: none; max-width: none;
+                           overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
+      #toolbar::-webkit-scrollbar, #playbar::-webkit-scrollbar, #palette::-webkit-scrollbar { display: none; }
+      #toolbar { top: 6px; }
+      #toolbar .group, #playbar > * { flex: 0 0 auto; }
+      #playbar { bottom: 6px; }
+
+      /* The palette becomes a strip along the bottom: a 122px column ate a third of the width and
+         still only showed six of the twenty-three pieces. It is hidden in play mode, so the play
+         bar can have the same corner. */
+      #palette { top: auto; bottom: 6px; left: 6px; right: 6px; width: auto; padding: 6px; gap: 6px;
+                 flex-direction: row; overflow-x: auto; overflow-y: hidden;
+                 scrollbar-width: none; touch-action: pan-x; }
+      #palette .piece { flex: 0 0 auto; width: 68px; padding: 4px 3px; font-size: 11px; }
+      #palette .piece canvas { width: 56px; height: 56px; }
+
+      /* HUD under the toolbar, race above the play bar: nothing lands on the bottom controls. */
+      #hud { top: 60px; bottom: auto; left: 6px; right: 6px; font-size: 11px; white-space: pre-wrap; }
+      #race { top: auto; bottom: 62px; right: 6px; width: 150px; font-size: 12px; }
+      #race ol { max-height: 26vh; }
+      #variants { top: auto; bottom: 108px; }
+      #help { touch-action: pan-y; }
+    }
   </style>
 </head>
 <body>

@@ -316,7 +316,7 @@ export function spawnMarble(
       : new THREE.MeshPhysicalMaterial({
           envMap: type.look.metalness > 0.2 ? metalEnvironment() : null,
           envMapIntensity: 1.6,
-          map: type.look.swirl ? swirlTexture(color) : undefined,
+          map: type.look.swirl ? swirlTexture(color) : null,
           color: type.look.swirl ? 0xffffff : new THREE.Color(color).lerp(STEEL_TINT, type.look.lighten ?? 0),
           emissive: type.look.emissive ? new THREE.Color(color) : new THREE.Color(0x000000),
           emissiveIntensity: type.look.emissive ?? 0,

@@ -741,7 +741,8 @@ export class Editor {
       if (panel) panel.hidden = true;
       const g = this.game;
       const flags = [g.timeScale !== 1 ? '慢动作' : '', g.follow ? '跟随中' : '', g.autoSpawn ? '连发中' : '', g.isPaused ? '已暂停' : ''].filter(Boolean).join('  ');
-      this.game.hudExtra = `试玩模式  ${flags}  [Tab] 回编辑`;
+      const back = matchMedia('(pointer: coarse)').matches ? '' : '  [Tab] 回编辑';
+      this.game.hudExtra = `试玩模式  ${flags}${back}`;
       return;
     }
     this.portMarkers.visible = true;
@@ -755,6 +756,8 @@ export class Editor {
   }
 
   private hudText(): string {
+    // On a touch device the keyboard hint line is noise, and screen space is scarce.
+    const keyHints = !matchMedia('(pointer: coarse)').matches;
     const tool = this.selectedDef ? `零件 ${this.selectedDef.name}` : '未选零件';
     let line1: string;
     if (this.toolMode === 'chain') {
@@ -777,6 +780,7 @@ export class Editor {
     const variants = this.variantContext ? variantsOf(this.variantContext) : [];
     const variantHint = variants.length > 1 ? `  V 换规格（${this.variantContext!.family!.label}）` : '';
     const picked = this.picked ? `  已选中「${this.picked.def.name}」：R 旋转  Delete 删除${this.toolMode === 'free' ? '  Q/E 升降  方向键平移' : ''}${variantHint}` : variantHint;
+    if (!keyHints) return `${line1}${picked}`;
     const line2 =
       this.toolMode === 'chain'
         ? '[1-9] 选零件  [R] 换接法  [Backspace] 撤掉上一块  [点黄点] 换接口  [WASD] 平移  [F] 聚焦  [Tab] 试玩'
