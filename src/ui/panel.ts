@@ -97,7 +97,7 @@ export function createPanel(editor: Editor, game: Game): void {
     const key = vs.map((d) => d.id).join(',');
     if (key !== variantKey) {
       variantKey = key;
-      variantName.textContent = `${ctx!.name.replace(/[ x×↑].*$/, '')} 规格`;
+      variantName.textContent = `${ctx!.name.replace(/[ x×].*$/, '')} 规格`;
       variantButtons.innerHTML = '';
       for (const d of vs) {
         const b = document.createElement('button');

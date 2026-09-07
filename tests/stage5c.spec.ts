@@ -9,6 +9,7 @@ type Seam = {
   marbles: () => M[];
   results: () => { id: number }[];
   spawnBurst: (n: number, interval?: number) => void;
+  spawnAtStart: () => number[];
   clearMarbles: () => void;
   importJSON: (t: string) => void;
   setMode: (m: 'edit' | 'play') => void;
@@ -112,6 +113,45 @@ test('a dense burst still crosses the splitter safely, even though it cannot alt
   // Marbles arrive at about 2.9 m/s; anything much above that means the flap hit one.
   expect(maxSpeed).toBeLessThan(4);
   expect(errors).toEqual([]);
+});
+
+test('jump pad clears its own stop bar and throws a real arc', async ({ page }) => {
+  // The pad spans x = 0.5 .. 4.5 with its origin at (1, 1, 0); the catch tray is at z = 0.
+  const errors = await loadTrack(page, [
+    { def: 'start', cell: { x: 0, z: 0 }, level: 3, rot: 0 },
+    { def: 'jump', cell: { x: 1, z: 0 }, level: 2, rot: 0 },
+    { def: 'end', cell: { x: 5, z: 0 }, level: 2, rot: 0 },
+  ]);
+  await page.evaluate(() => window.__TEST__.spawnBurst(3, 1.5));
+  let launch: M | null = null;
+  let peak = -9;
+  let sideways = 0;
+  let done = false;
+  for (let i = 0; i < 600 && !done; i++) {
+    await page.evaluate(() => window.__TEST__.stepN(6));
+    for (const m of await page.evaluate(() => window.__TEST__.marbles())) {
+      if (!launch && m.vy > 2 && m.x < 1.5) launch = m;
+      if (m.x > 1.2 && m.x < 4.6) {
+        peak = Math.max(peak, m.y - 1);
+        sideways = Math.max(sideways, Math.abs(m.z));
+      }
+    }
+    done = (await page.evaluate(() => window.__TEST__.results().length)) >= 3;
+  }
+  console.log(`jump: launch=(${launch?.vx.toFixed(2)}, ${launch?.vy.toFixed(2)}) peak=${peak.toFixed(2)} sideways=${sideways.toFixed(2)}`);
+  expect(launch, 'the pad fired').toBeTruthy();
+  // The launch used to graze the stop bar and lose two thirds of its forward speed in one step;
+  // the marble must keep enough of it to carry down the tray.
+  expect(launch!.vx, 'keeps its forward speed past the stop bar').toBeGreaterThan(1.4);
+  expect(peak, 'a real arc, not a vertical pop').toBeGreaterThan(1.1);
+  // ...but not so high that it leaves the 3 levels the piece reserves above its anchor.
+  expect(peak).toBeLessThan(1.5);
+  // Firing only once the marble has settled keeps the launch straight down the tray.
+  expect(sideways, 'no sideways drift out of the catch tray').toBeLessThan(0.25);
+  expect(done, 'all three marbles reached the goal').toBe(true);
+  expect(errors).toEqual([]);
+  await page.evaluate(() => window.__TEST__.lookAt(2.6, 1.9, 0, 5));
+  await page.screenshot({ path: 'test-results/stage5c-jump-arc.png' });
 });
 
 test('a lift cannot be placed at level 0, where the ground would cut through its shaft', async ({ page }) => {

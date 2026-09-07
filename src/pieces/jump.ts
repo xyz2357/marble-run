@@ -16,7 +16,15 @@ import { H, v3, type BuiltPiece, type Mechanism, type MechanismContext, type Pie
  */
 const TILT = THREE.MathUtils.degToRad(35); // chute slope at the pocket
 const ALONG = new THREE.Vector3(Math.cos(TILT), -Math.sin(TILT), 0); // down the chute
-const NORMAL = new THREE.Vector3(Math.sin(TILT), Math.cos(TILT), 0); // launch direction (55 degrees)
+const NORMAL = new THREE.Vector3(Math.sin(TILT), Math.cos(TILT), 0); // chute floor normal (55 degrees)
+/**
+ * The spring pushes 10 degrees steeper than the chute's normal, at 65 degrees. Straight along the
+ * normal the marble travels exactly parallel to the stop bar's face - it rests against that face,
+ * one radius away - and clips the bar's top corner on the way out, which used to cost it two
+ * thirds of its forward speed. Ten degrees is enough to pull away from the face as it rises.
+ */
+const LAUNCH_TILT = TILT - THREE.MathUtils.degToRad(10);
+const LAUNCH = new THREE.Vector3(Math.sin(LAUNCH_TILT), Math.cos(LAUNCH_TILT), 0);
 /** Where the chute floor meets the stop bar (centre line). */
 const POCKET_END = v3(0.26, 0.12, 0);
 const BAR_H = 0.3;
@@ -25,11 +33,25 @@ const BUTTON_HX = 0.13;
 const BUTTON_HZ = 0.25;
 const STROKE = 0.16;
 const T_CHARGE = 0.2;
-const T_FIRE = 0.045; // ~3.5 m/s
+/**
+ * Plate speed is STROKE / T_FIRE, so this sets the launch: 4 m/s of plate gives about 4.4 m/s off
+ * the pad and a 1.25 m arc. Much harder than this and a marble that entered the pocket a little
+ * off-centre lands beyond the catch tray's wall instead of in it.
+ */
+const T_FIRE = 0.04;
 const T_HOLD = 0.05;
 const T_RETURN = 0.3;
 /** A marble must sit in the pocket for this long before the button fires. */
 const DWELL = 0.2;
+/**
+ * ...and be this still while it does, measured as movement per physics step (0.0025 m at 1/120 s
+ * is 0.3 m/s). A marble that arrives off-centre rolls from side to side in the pocket for a
+ * moment; firing then adds that sideways drift to the launch, and the marble sails over the
+ * catch tray's wall instead of landing in it.
+ */
+const SETTLE_STEP = 0.0025;
+/** Fire anyway after this long, so a marble that never settles cannot stall the pad. */
+const MAX_WAIT = 1.5;
 const GATE_X = -0.3;
 /** Crest of the stop bar (its upper -X corner after the tilt) and the top of the catch tray's
  *  back wall: the two lips of the notch the ramp below fills in. */
@@ -58,6 +80,8 @@ function gateGeometry(): THREE.BufferGeometry {
 }
 
 const tiltQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -TILT);
+/** The button plate faces along LAUNCH, so the marble leaves along it too. */
+const launchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -LAUNCH_TILT);
 /** Marble centre when resting against the stop bar. */
 const REST = POCKET_END.clone().addScaledVector(ALONG, -0.15).addScaledVector(NORMAL, 0.15);
 /** Button centre at rest: its top face just under the chute floor beneath the resting marble. */
@@ -65,7 +89,7 @@ const BUTTON_REST = POCKET_END.clone().addScaledVector(ALONG, -0.15).addScaledVe
 
 function buttonGeometry(): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(BUTTON_HX * 2, 0.024, BUTTON_HZ * 2);
-  g.applyQuaternion(tiltQ);
+  g.applyQuaternion(launchQ);
   g.translate(BUTTON_REST.x, BUTTON_REST.y, BUTTON_REST.z);
   return g;
 }
@@ -150,7 +174,7 @@ function makeButton(ctx: MechanismContext): Mechanism {
   ctx.world.createCollider(
     RAPIER.ColliderDesc.cuboid(BUTTON_HX, 0.012, BUTTON_HZ)
       .setTranslation(BUTTON_REST.x, BUTTON_REST.y, BUTTON_REST.z)
-      .setRotation(tiltQ)
+      .setRotation(launchQ)
       .setFriction(0.5)
       .setRestitution(0)
       .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Min),
@@ -175,7 +199,7 @@ function makeButton(ctx: MechanismContext): Mechanism {
   const base = BUTTON_REST.clone().addScaledVector(NORMAL, -springLen0 - 0.012);
   const spring = new THREE.Mesh(springGeometry(springLen0), new THREE.MeshStandardMaterial({ color: 0x8a8f99, roughness: 0.4, metalness: 0.6 }));
   spring.position.copy(base).applyQuaternion(ctx.quat).add(ctx.origin);
-  spring.quaternion.copy(ctx.quat).multiply(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), NORMAL));
+  spring.quaternion.copy(ctx.quat).multiply(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), LAUNCH));
   ctx.root.add(spring);
 
   const inv = ctx.quat.clone().invert();
@@ -183,7 +207,13 @@ function makeButton(ctx: MechanismContext): Mechanism {
   let phase: 'idle' | 'charge' | 'fire' | 'hold' | 'return' = 'idle';
   let t = 0;
   let dwell = 0;
-  let s = 0; // displacement along NORMAL
+  let waiting = 0;
+  let s = 0; // displacement along LAUNCH
+  // Last seen position of the marble in the pocket, to tell settled from still rolling around.
+  const nearPos = new THREE.Vector3();
+  const prevNear = new THREE.Vector3();
+  let nearId = -1;
+  let prevNearId = -1;
 
   return {
     update(dt, marbles) {
@@ -191,10 +221,15 @@ function makeButton(ctx: MechanismContext): Mechanism {
       let near = false;
       let pastGate = false;
       let overGate = false;
+      nearId = -1;
       for (const m of marbles) {
         local.copy(m.pos).sub(ctx.origin).applyQuaternion(inv);
         if (Math.abs(local.z) > 0.4 || local.y < -0.2 || local.y > 0.9) continue;
-        if (local.distanceTo(REST) < 0.2) near = true;
+        if (local.distanceTo(REST) < 0.2) {
+          near = true;
+          nearId = m.id;
+          nearPos.copy(local);
+        }
         if (local.x > GATE_X + 0.2 && local.x < 0.6) pastGate = true;
         if (Math.abs(local.x - GATE_X) < 0.24) overGate = true;
       }
@@ -204,12 +239,23 @@ function makeButton(ctx: MechanismContext): Mechanism {
       local.set(0, -0.42 * smooth(gateDown), 0).applyQuaternion(ctx.quat).add(ctx.origin);
       gateBody.setNextKinematicTranslation({ x: local.x, y: local.y, z: local.z });
 
+      const calm = near && nearId === prevNearId && nearPos.distanceTo(prevNear) < SETTLE_STEP;
+      prevNearId = nearId;
+      prevNear.copy(nearPos);
+
       if (phase === 'idle') {
-        dwell = near ? dwell + dt : 0;
-        if (dwell >= DWELL) {
+        if (!near) {
+          dwell = 0;
+          waiting = 0;
+        } else {
+          waiting += dt;
+          dwell = calm ? dwell + dt : 0;
+        }
+        if (dwell >= DWELL || waiting >= MAX_WAIT) {
           phase = 'charge';
           t = 0;
           dwell = 0;
+          waiting = 0;
         }
       } else {
         t += dt;
@@ -239,7 +285,7 @@ function makeButton(ctx: MechanismContext): Mechanism {
           }
         }
       }
-      local.copy(NORMAL).multiplyScalar(s).applyQuaternion(ctx.quat).add(ctx.origin);
+      local.copy(LAUNCH).multiplyScalar(s).applyQuaternion(ctx.quat).add(ctx.origin);
       body.setNextKinematicTranslation({ x: local.x, y: local.y, z: local.z });
       spring.scale.y = (springLen0 + s) / springLen0;
     },

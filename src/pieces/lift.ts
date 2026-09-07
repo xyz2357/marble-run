@@ -36,8 +36,8 @@ export function liftDef(levels: number, solid = false): PieceDef {
     // `solid` only swaps the shaft walls' material. It is a separate family member rather than a
     // stored setting so a saved track stays a list of piece ids - see the note in registry.ts.
     id: solid ? `lift${levels}_solid` : `lift${levels}`,
-    name: solid ? `电梯 ↑${levels}（实心）` : `电梯 ↑${levels}`,
-    family: { id: 'lift', label: solid ? `↑${levels} 实心` : `↑${levels} 玻璃` },
+    name: solid ? `电梯 ${levels} 层（实心）` : `电梯 ${levels} 层`,
+    family: { id: 'lift', label: solid ? `${levels} 层实心` : `${levels} 层玻璃` },
     footprint: [
       { x: 0, z: 0 },
       { x: 1, z: 0 },
