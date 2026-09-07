@@ -14,6 +14,7 @@ import { gateDef } from './gate';
 import { jumpDef } from './jump';
 import { helixDef } from './helix';
 import { liftDef } from './lift';
+import { loopDef } from './loop';
 import { seesawDef } from './seesaw';
 import { sCurveLeftDef, sCurveRightDef } from './scurve';
 import { mergeDef, splitterDef, splitterRandomDef } from './splitter';
@@ -56,6 +57,7 @@ const defs: PieceDef[] = [
   liftDef(8, true),
   liftDef(10),
   liftDef(10, true),
+  loopDef,
   gateDef(1.5),
   gateDef(3),
   gateDef(5),
@@ -67,6 +69,7 @@ const defs: PieceDef[] = [
   jumpDef,
   wheelDef(5),
   wheelDef(2.5),
+  wheelDef(7, 8),
 ];
 
 export const PIECES: ReadonlyMap<string, PieceDef> = new Map(defs.map((d) => [d.id, d]));

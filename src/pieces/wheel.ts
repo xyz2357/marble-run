@@ -14,21 +14,69 @@ import { H, v3, type BuiltPiece, type Mechanism, type MechanismContext, type Pie
  * pushed out under it instead of being squeezed between wall and blade (which
  * used to launch marbles out of the wheel sideways).
  */
-const R = 0.55;
-const HUB = 0.12;
-const BLADES = 8;
-const CENTER = v3(0, 0.85, 0); // top of the wheel (1.40) clears the entry deck's underside (1.42)
-const HALF_W = 0.37; // blade half width (z)
-const DISC_Z = 0.41; // side discs sit outside the blades; a marble inside a compartment cannot rest on their rims
-const CASING_HALF_Z = 0.47;
-const ENTRY_Y = 4 * H;
-const CASING_IN = R + 0.03;
-const CASING_OUT = R + 0.08;
 const CASING_FROM = THREE.MathUtils.degToRad(125); // just under the entry deck
 const CASING_TO = THREE.MathUtils.degToRad(320); // exit lip (-40 degrees), reached the long way round the bottom
-const EXIT_DECK = v3(0.52, 0.42, 0);
 
-function wheelGeometry(): THREE.BufferGeometry {
+/**
+ * Everything about the wheel scales with its radius except the marble, so the widths across the
+ * track (blade width, disc spacing, casing width) stay put: those are sized to the marble, not to
+ * the wheel. `drop` is how many levels the piece takes the marble down, which is what sets the
+ * radius - the entry deck has to sit above the top of the wheel.
+ */
+interface Dims {
+  R: number;
+  HUB: number;
+  BLADES: number;
+  CENTER: THREE.Vector3;
+  HALF_W: number;
+  DISC_Z: number;
+  CASING_HALF_Z: number;
+  ENTRY_Y: number;
+  CASING_IN: number;
+  CASING_OUT: number;
+  EXIT_DECK: THREE.Vector3;
+  /** Piece-local x of the two ports, and the cells the piece covers. */
+  IN_X: number;
+  OUT_X: number;
+  CELLS: number[];
+  HEIGHT_UNITS: number;
+}
+
+function dims(drop: number): Dims {
+  const R = drop === 4 ? 0.55 : 1.15;
+  const ENTRY_Y = drop * H;
+  // Centre placed so the wheel's top clears the entry deck's underside.
+  const CENTER = v3(0, ENTRY_Y - R - 0.6, 0);
+  const CASING_OUT = R + 0.08;
+  // Exit lip, just outside the casing where it ends at -40 degrees. The small wheel keeps the
+  // hand-tuned value it always had: the computed point sits 7 mm lower, which was enough to lose
+  // a marble off the lip about one run in three.
+  const lip = CASING_OUT + 0.05;
+  const EXIT_DECK =
+    drop === 4 ? v3(0.52, 0.42, 0) : v3(lip * Math.cos(CASING_TO), CENTER.y + lip * Math.sin(CASING_TO), 0);
+  // The wheel itself reaches +-CASING_OUT, so a big one needs a cell of its own on each side.
+  const wide = CASING_OUT > 0.75;
+  return {
+    R,
+    HUB: 0.12,
+    BLADES: drop === 4 ? 8 : 12,
+    CENTER,
+    HALF_W: 0.37,
+    DISC_Z: 0.41,
+    CASING_HALF_Z: 0.47,
+    ENTRY_Y,
+    CASING_IN: R + 0.03,
+    CASING_OUT,
+    EXIT_DECK,
+    IN_X: wide ? -1.5 : -0.5,
+    OUT_X: wide ? 2.5 : 1.5,
+    CELLS: wide ? [-1, 0, 1, 2] : [0, 1],
+    HEIGHT_UNITS: Math.ceil((ENTRY_Y + 0.5) / H),
+  };
+}
+
+function wheelGeometry(d: Dims): THREE.BufferGeometry {
+  const { R, HUB, BLADES, CENTER, HALF_W, DISC_Z } = d;
   const parts: THREE.BufferGeometry[] = [];
   const hub = new THREE.CylinderGeometry(HUB, HUB, DISC_Z * 2, 24);
   hub.rotateX(Math.PI / 2);
@@ -50,25 +98,31 @@ function wheelGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-/** @param period seconds per revolution */
-export function wheelDef(period = 5): PieceDef {
+/**
+ * @param period seconds per revolution
+ * @param drop how many levels the wheel carries the marble down; 8 is the big one, which needs
+ *   twice the radius and so a cell of its own on each side.
+ */
+export function wheelDef(period = 5, drop = 4): PieceDef {
+  const d = dims(drop);
+  const big = drop !== 4;
   return {
-  id: period === 5 ? 'wheel' : 'wheel_fast',
-  name: '水车',
-  family: { id: 'wheel', label: period === 5 ? '慢' : '快' },
-  footprint: [
-    { x: 0, z: 0 },
-    { x: 1, z: 0 },
-  ],
-  heightUnits: 5,
+  id: big ? 'wheel_big' : period === 5 ? 'wheel' : 'wheel_fast',
+  name: big ? '大水车' : '水车',
+  family: { id: 'wheel', label: big ? '大' : period === 5 ? '慢' : '快' },
+  footprint: d.CELLS.map((x) => ({ x, z: 0 })),
+  heightUnits: d.HEIGHT_UNITS,
   ports: [
-    { pos: v3(-0.5, ENTRY_Y, 0), dir: v3(-1, 0, 0), kind: 'in' },
-    { pos: v3(1.5, 0, 0), dir: v3(1, 0, 0), kind: 'out' },
+    { pos: v3(d.IN_X, d.ENTRY_Y, 0), dir: v3(-1, 0, 0), kind: 'in' },
+    { pos: v3(d.OUT_X, 0, 0), dir: v3(1, 0, 0), kind: 'out' },
   ],
   build(): BuiltPiece {
+    const { R, CENTER, CASING_IN, CASING_OUT, CASING_HALF_Z, ENTRY_Y, EXIT_DECK } = d;
     // The deck ends just before the top of the wheel; the marble flies off it into the drop shaft.
-    const entry = sweep(slopePath(v3(-0.5, ENTRY_Y, 0), v3(-0.2, ENTRY_Y - 0.01, 0)), 4);
-    const exit = sweep(slopePath(EXIT_DECK, v3(1.5, 0, 0)), 16);
+    // 4 segments for the small wheel: that is what it always had, and this piece is tuned to the
+    // millimetre - keep its geometry identical so only the big variant is new.
+    const entry = sweep(slopePath(v3(d.IN_X, ENTRY_Y, 0), v3(-0.2, ENTRY_Y - 0.01, 0)), big ? 10 : 4);
+    const exit = sweep(slopePath(EXIT_DECK, v3(d.OUT_X, 0, 0)), 16);
     const casing = ringShell(CENTER, CASING_IN, CASING_OUT, CASING_HALF_Z, CASING_FROM, CASING_TO, 48);
     // Drop shaft above the wheel: front wall (bottom edge one marble diameter above the rim), back wall
     // down to the casing, side walls keeping the marble over the blades.
@@ -98,14 +152,15 @@ export function wheelDef(period = 5): PieceDef {
         { geometry: stand, material: 'dark', collide: false },
         { geometry: axle, material: 'dark', collide: false },
       ],
-      preview: [{ geometry: wheelGeometry(), material: 'wood' }],
-      mechanisms: [(ctx) => makeWheel(ctx, period)],
+      preview: [{ geometry: wheelGeometry(d), material: 'wood' }],
+      mechanisms: [(ctx) => makeWheel(ctx, period, d)],
     };
   },
   };
 }
 
-function makeWheel(ctx: MechanismContext, PERIOD: number): Mechanism {
+function makeWheel(ctx: MechanismContext, PERIOD: number, d: Dims): Mechanism {
+  const { R, HUB, BLADES, CENTER, HALF_W, DISC_Z } = d;
   const c = CENTER.clone().applyQuaternion(ctx.quat).add(ctx.origin);
   const body = ctx.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(c.x, c.y, c.z).setRotation(ctx.quat));
   const zq = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
@@ -120,7 +175,7 @@ function makeWheel(ctx: MechanismContext, PERIOD: number): Mechanism {
   for (const z of [DISC_Z, -DISC_Z]) {
     ctx.world.createCollider(grip(RAPIER.ColliderDesc.cylinder(0.01, R).setTranslation(0, 0, z).setRotation(zq)), body);
   }
-  const geo = wheelGeometry();
+  const geo = wheelGeometry(d);
   geo.translate(-CENTER.x, -CENTER.y, -CENTER.z);
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xd2a56d, roughness: 0.85, flatShading: true }));
   mesh.castShadow = true;
