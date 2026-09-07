@@ -837,8 +837,14 @@ export class Editor {
     const top = new THREE.Vector3(box.min.x + (box.max.x - box.min.x) / 2, box.max.y, box.min.z + (box.max.z - box.min.z) / 2);
     const s = this.projectToPx(top);
     el.hidden = s.behind;
-    el.style.left = `${Math.round(s.x)}px`;
-    el.style.top = `${Math.round(s.y) - 12}px`;
+    // The panel is centred on the piece and sits above it, so near an edge it used to hang off
+    // the screen - on a phone it started at x = 1 with its left half cut away. Clamp it in.
+    const w = el.offsetWidth || 240;
+    const h = el.offsetHeight || 44;
+    const x = THREE.MathUtils.clamp(Math.round(s.x), w / 2 + 6, window.innerWidth - w / 2 - 6);
+    const y = THREE.MathUtils.clamp(Math.round(s.y) - 12, h + 6, window.innerHeight - 6);
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
     el.dataset.toolMode = this.toolMode;
   }
 

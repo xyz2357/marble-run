@@ -116,7 +116,11 @@
 
     #variants { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px;
       padding: 4px 8px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; font-size: 13px; }
-    #variants .name { color: var(--muted); margin-right: 4px; }
+    #variants .name { color: var(--muted); margin-right: 4px; white-space: nowrap; }
+    /* The buttons live in a span, so they wrap unless it is a row of its own - eight lift
+       variants turned the bar into a 142px block on a phone. */
+    #variants .buttons { display: flex; flex-wrap: nowrap; gap: 4px; }
+    #variants .buttons button { flex: 0 0 auto; }
     #variants button { background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
     #variants button:hover { background: rgba(255,255,255,0.08); }
     #variants button.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
@@ -148,29 +152,58 @@
        of each one off both edges of a 412px screen - including the edit/play switch. Here they
        span the screen and scroll sideways instead; touch-action has to allow that, since the
        body blocks default gestures so a drag rotates the camera. */
+    /* Phone-only chrome; the media query below turns them on. */
+    #more-group, #palette-toggle { display: none; }
+
     @media (max-width: 760px) {
-      #toolbar, #playbar { left: 6px; right: 6px; transform: none; max-width: none;
-                           overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
-      #toolbar::-webkit-scrollbar, #playbar::-webkit-scrollbar, #palette::-webkit-scrollbar { display: none; }
-      #toolbar { top: 6px; }
-      #toolbar .group, #playbar > * { flex: 0 0 auto; }
-      #playbar { bottom: 6px; }
+      /* The toolbar does not scroll sideways any more: 20-odd controls came to three screens of
+         it, so the level buttons - which you need on almost every piece - were off screen and
+         invisible. What is left in the first row is what building actually needs; the rest folds
+         out below on "...". */
+      #toolbar { left: 6px; right: 6px; transform: none; max-width: none; top: 6px; flex-wrap: wrap; }
+      #toolbar .group { flex: 0 0 auto; }
+      #toolbar .group.phone-more { display: none; }
+      #toolbar.expanded .group.phone-more { display: flex; }
+      #toolbar.expanded { padding-bottom: 8px; }
+      #more-group { display: flex; margin-left: auto; }
+      #toolbar #demo-select { max-width: 42vw; }
 
-      /* The palette becomes a strip along the bottom: a 122px column ate a third of the width and
-         still only showed six of the twenty-three pieces. It is hidden in play mode, so the play
-         bar can have the same corner. */
+      #playbar { left: 6px; right: 6px; transform: none; max-width: none; bottom: 6px;
+                 overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
+      #playbar::-webkit-scrollbar, #palette::-webkit-scrollbar { display: none; }
+      #playbar > * { flex: 0 0 auto; }
+
+      /* The palette wraps into a grid instead of scrolling sideways. A single row meant 4.3
+         screens of horizontal scrolling to reach the 23rd piece with five visible at a time;
+         wrapped, they are all within one short vertical scroll and you can see what you are
+         choosing from. */
       #palette { top: auto; bottom: 6px; left: 6px; right: 6px; width: auto; padding: 6px; gap: 6px;
-                 flex-direction: row; overflow-x: auto; overflow-y: hidden;
-                 scrollbar-width: none; touch-action: pan-x; }
-      #palette .piece { flex: 0 0 auto; width: 68px; padding: 4px 3px; font-size: 11px; }
-      #palette .piece canvas { width: 56px; height: 56px; }
+                 flex-direction: row; flex-wrap: wrap; justify-content: flex-start;
+                 max-height: 38vh; overflow-x: hidden; overflow-y: auto;
+                 scrollbar-width: none; touch-action: pan-y; }
+      #palette .piece { flex: 0 0 auto; width: 70px; padding: 4px 3px; font-size: 11px; }
+      #palette .piece canvas { width: 58px; height: 58px; }
+      /* Collapsed to one row until you need it, so it does not sit on half the track. */
+      #palette:not(.open) { max-height: 84px; overflow: hidden; }
+      #palette-toggle { display: block; position: fixed; right: 10px; z-index: 12; bottom: calc(6px + 84px + 6px);
+                        background: var(--panel); color: var(--text); border: 1px solid var(--panel-border);
+                        border-radius: 8px; padding: 7px 12px; font-size: 13px; backdrop-filter: blur(6px); }
+      #palette.open ~ #palette-toggle { bottom: calc(38vh + 12px); }
 
-      /* HUD under the toolbar, race above the play bar: nothing lands on the bottom controls. */
-      #hud { top: 60px; bottom: auto; left: 6px; right: 6px; font-size: 11px; white-space: pre-wrap; }
+      /* Stacked under the toolbar, which is not a fixed height here: it wraps to two rows and
+         grows again when "..." is open, so these follow the measured height (see panel.ts). */
+      #hud { top: calc(var(--toolbar-h, 56px) + 12px); bottom: auto; left: 6px; right: 6px;
+             font-size: 11px; white-space: pre-wrap; }
       #race { top: auto; bottom: 62px; right: 6px; width: 150px; font-size: 12px; }
       #race ol { max-height: 26vh; }
-      #variants { top: auto; bottom: 108px; }
+      /* One scrolling row under the HUD, not a 142px block down at the thumb: the lift alone has
+         eight variants, and the bottom of the screen already belongs to the palette. */
+      #variants { top: calc(var(--toolbar-h, 56px) + var(--hud-h, 40px) + 18px); bottom: auto;
+                  left: 6px; right: 6px; transform: none;
+                  overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
       #help { touch-action: pan-y; }
+      /* Never let the floating panel for a selected piece hang off the edge. */
+      #picked-panel { max-width: calc(100vw - 12px); }
     }
   </style>
 </head>

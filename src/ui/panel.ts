@@ -16,37 +16,40 @@ export function createPanel(editor: Editor, game: Game): void {
         <button data-action="mode-edit" class="mode">编辑</button>
         <button data-action="mode-play" class="mode">试玩</button>
       </div>
-      <div class="group" id="toolmode-group">
+      <div class="group phone-more" id="toolmode-group">
         <button data-action="tool-chain" title="新零件接在橙色接口上">接龙</button>
         <button data-action="tool-free" title="鼠标指哪放哪，靠近接口时吸附">自由</button>
       </div>
       <div class="group">
         <button data-action="undo" title="Ctrl+Z">撤销</button>
         <button data-action="redo" title="Ctrl+Y">重做</button>
+        <button data-action="frame" title="F">看全图</button>
       </div>
       <div class="group" id="level-group">
         <button data-action="level-down" title="Q / Shift+滚轮">层 −</button>
         <span id="level-label" class="label"></span>
         <button data-action="level-up" title="E / Shift+滚轮">层 +</button>
       </div>
-      <div class="group">
+      <div class="group phone-more">
         <button data-action="view-iso" title="等轴视角">等轴</button>
         <button data-action="view-top" title="俯视">俯视</button>
         <button data-action="view-side" title="侧视">侧视</button>
-        <button data-action="frame" title="F">看全图</button>
       </div>
-      <div class="group">
+      <div class="group phone-more">
         <select id="demo-select" title="载入一条预置示例轨道">
           <option value="" selected>示例…</option>
           ${DEMOS.map((d, i) => `<option value="${i + 1}" title="${d.hint}">${d.name}</option>`).join('')}
         </select>
         <button data-action="clear" class="danger">清空</button>
       </div>
-      <div class="group">
+      <div class="group phone-more">
         <button data-action="download">导出</button>
         <button data-action="import">导入</button>
         <input id="import-file" type="file" accept="application/json,.json" hidden />
         <button data-action="help" title="快捷键和玩法说明（? 或 H）">?</button>
+      </div>
+      <div class="group" id="more-group">
+        <button data-action="more" title="更多">⋯</button>
       </div>
     </div>
     <div id="help" hidden>
@@ -96,6 +99,7 @@ export function createPanel(editor: Editor, game: Game): void {
     </div>
     <div id="variants" hidden><span class="name"></span><span class="buttons"></span></div>
     <div id="palette"></div>
+    <button id="palette-toggle" data-action="palette-toggle">零件 ▲</button>
     <div id="picked-panel" hidden>
       <button data-picked="rotate" title="R">旋转</button>
       <button data-picked="variant" title="V">规格</button>
@@ -106,7 +110,22 @@ export function createPanel(editor: Editor, game: Game): void {
     </div>
   `;
 
+  const toolbar = root.querySelector<HTMLDivElement>('#toolbar')!;
+  const hudEl = document.getElementById('hud');
+  // The toolbar wraps to two rows on a phone and grows again when "..." is open, and the HUD's
+  // own height changes with its message, so anything stacked under them has to follow. CSS gets
+  // the measurements as variables rather than a guessed constant.
+  // On :root, not on #ui - the HUD is a sibling of #ui, so a variable set there never reaches it.
+  const stack = new ResizeObserver(() => {
+    const css = document.documentElement.style;
+    css.setProperty('--toolbar-h', `${Math.round(toolbar.getBoundingClientRect().height)}px`);
+    if (hudEl) css.setProperty('--hud-h', `${Math.round(hudEl.getBoundingClientRect().height)}px`);
+  });
+  stack.observe(toolbar);
+  if (hudEl) stack.observe(hudEl);
+
   const palette = root.querySelector<HTMLDivElement>('#palette')!;
+  const paletteToggle = root.querySelector<HTMLButtonElement>('#palette-toggle')!;
   const thumbs = renderThumbnails(paletteDefs(), 72);
   paletteDefs().forEach((def, i) => {
     const btn = document.createElement('button');
@@ -229,6 +248,14 @@ export function createPanel(editor: Editor, game: Game): void {
         case 'frame':
           game.frameTrack();
           break;
+        case 'more':
+          root.querySelector('#toolbar')!.classList.toggle('expanded');
+          break;
+        case 'palette-toggle': {
+          const open = palette.classList.toggle('open');
+          btn.textContent = open ? '零件 ▼' : '零件 ▲';
+          break;
+        }
         case 'help':
           toggleHelp();
           break;
@@ -303,6 +330,7 @@ export function createPanel(editor: Editor, game: Game): void {
     root.querySelector('#level-label')!.textContent = `${editor.level}`;
     root.querySelector('#level-group')!.classList.toggle('dim', editor.toolMode === 'chain');
     palette.hidden = editor.mode !== 'edit';
+    paletteToggle.hidden = palette.hidden;
     root.querySelector('#toolmode-group')!.classList.toggle('disabled', editor.mode !== 'edit');
   };
   editor.onChange = refresh;
