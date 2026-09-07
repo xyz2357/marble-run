@@ -15,6 +15,7 @@ const MAX_STEPS_PER_FRAME = 8;
 
 export interface RaceResult {
   id: number;
+  /** As rendered, so the race list's dot matches the marble (steel is tinted grey). */
   color: number;
   /** Seconds from spawn to goal. */
   time: number;
@@ -321,7 +322,7 @@ export class Game {
       if (m.finishTime === null && goals.some((g) => g.containsPoint(this.tmpV))) {
         m.finishTime = this.simTime;
         this.finished.push(m.id);
-        this.results.push({ id: m.id, color: m.color, time: this.simTime - m.spawnTime });
+        this.results.push({ id: m.id, color: m.displayColor, time: this.simTime - m.spawnTime });
         changed = true;
       }
     }

@@ -33,9 +33,61 @@ export interface TrackPieceInstance {
   mechanisms: Mechanism[];
 }
 
+/**
+ * Procedural wood grain, one tile per metre. `sweep` writes UVs in metres with u along the path,
+ * so the grain runs the way the track does; box parts carry BoxGeometry's own 0..1 UVs and get
+ * one tile per face, which at this scale still reads as timber.
+ *
+ * Note flatShading has to go with it: it quantises the normal per triangle, which fights the
+ * texture and makes the grain look faceted rather than painted on.
+ */
+function woodTexture(): THREE.CanvasTexture {
+  const w = 256;
+  const h = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#d2a56d';
+  ctx.fillRect(0, 0, w, h);
+  // Long grain lines along u, wandering slightly so they do not read as a barcode.
+  for (let i = 0; i < 90; i++) {
+    const y = Math.random() * h;
+    const dark = Math.random() < 0.5;
+    ctx.strokeStyle = dark ? `rgba(120, 82, 45, ${0.05 + Math.random() * 0.16})` : `rgba(240, 208, 165, ${0.05 + Math.random() * 0.14})`;
+    ctx.lineWidth = 0.6 + Math.random() * 2.4;
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 8) {
+      const yy = y + Math.sin(x * 0.02 + i) * 2.2 + Math.sin(x * 0.005 + i * 2) * 3.5;
+      if (x === 0) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  // A couple of knots.
+  for (let i = 0; i < 2; i++) {
+    const cx = Math.random() * w;
+    const cy = Math.random() * h;
+    for (let r = 9; r > 0; r--) {
+      ctx.strokeStyle = `rgba(110, 74, 40, ${0.05 + 0.04 * (9 - r)})`;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r * 2.2, r, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const grain = woodTexture();
+
 export const MATERIALS: Record<MaterialKey, THREE.Material> = {
-  wood: new THREE.MeshStandardMaterial({ color: 0xd2a56d, roughness: 0.85, side: THREE.DoubleSide, flatShading: true }),
-  dark: new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.9, side: THREE.DoubleSide, flatShading: true }),
+  wood: new THREE.MeshStandardMaterial({ map: grain, roughness: 0.85, side: THREE.DoubleSide }),
+  dark: new THREE.MeshStandardMaterial({ map: grain, color: 0x7a5533, roughness: 0.9, side: THREE.DoubleSide }),
   accent: new THREE.MeshStandardMaterial({ color: 0xe0574f, roughness: 0.7, side: THREE.DoubleSide }),
   goal: new THREE.MeshStandardMaterial({ color: 0x3ec46d, roughness: 0.7, side: THREE.DoubleSide }),
   // Tinted glass for shafts and casings. depthWrite off so the marble behind the near wall is

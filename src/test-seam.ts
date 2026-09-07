@@ -26,7 +26,7 @@ export function installTestSeam(game: Game, editor: Editor): void {
       game.marbles.map((m) => {
         const t = m.body.translation();
         const v = m.body.linvel();
-        return { id: m.id, type: m.type, shape: m.shape, x: t.x, y: t.y, z: t.z, vx: v.x, vy: v.y, vz: v.z };
+        return { id: m.id, type: m.type, shape: m.shape, color: m.color, displayColor: m.displayColor, x: t.x, y: t.y, z: t.z, vx: v.x, vy: v.y, vz: v.z };
       }),
     finished: () => [...game.finished],
     /** Contact normals / points for one marble (debugging geometry). */

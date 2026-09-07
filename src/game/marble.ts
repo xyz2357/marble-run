@@ -37,7 +37,7 @@ export interface MarbleTypeDef {
    * environment map in this scene, so a fully metallic ball has nothing to reflect and renders
    * black. Half-metal plus a light tint reads as polished metal under these lights.
    */
-  look: { roughness: number; metalness: number; clearcoat: number; swirl: boolean; lighten?: number };
+  look: { roughness: number; metalness: number; clearcoat: number; swirl: boolean; lighten?: number; emissive?: number };
 }
 
 /** Selectable marbles, in play-bar order. */
@@ -81,6 +81,18 @@ export const MARBLE_TYPES: MarbleTypeDef[] = [
     look: { roughness: 0.95, metalness: 0, clearcoat: 0, swirl: false },
   },
   {
+    id: 'glow',
+    name: '发光珠',
+    shape: 'ball',
+    // Physically a glass marble; it just glows, so it is safe on any track a glass marble runs.
+    density: 2.5,
+    restitution: 0.3,
+    friction: 0.6,
+    linearDamping: 0.05,
+    angularDamping: 0.15,
+    look: { roughness: 0.35, metalness: 0, clearcoat: 0.35, swirl: false, emissive: 1.1 },
+  },
+  {
     id: 'egg',
     name: '鸡蛋',
     shape: 'egg',
@@ -101,10 +113,21 @@ export function getMarbleType(id: string): MarbleTypeDef {
   return MARBLE_TYPES.find((t) => t.id === id) ?? DEFAULT_TYPE;
 }
 
+/**
+ * The colour a marble actually appears in. Steel mixes its race colour towards grey, so the race
+ * list's dot has to do the same or it names a colour that is not on the table.
+ */
+export function marbleDisplayColor(typeId: string, color: number): number {
+  const t = getMarbleType(typeId);
+  return new THREE.Color(color).lerp(STEEL_TINT, t.look.lighten ?? 0).getHex();
+}
+
 export interface Marble {
   id: number;
   /** Which MARBLE_TYPES entry this was spawned as. */
   type: string;
+  /** Race colour as rendered (steel is tinted); use this for UI swatches, not `color`. */
+  displayColor: number;
   shape: MarbleShape;
   body: RAPIER.RigidBody;
   collider: RAPIER.Collider;
@@ -295,6 +318,8 @@ export function spawnMarble(
           envMapIntensity: 1.6,
           map: type.look.swirl ? swirlTexture(color) : undefined,
           color: type.look.swirl ? 0xffffff : new THREE.Color(color).lerp(STEEL_TINT, type.look.lighten ?? 0),
+          emissive: type.look.emissive ? new THREE.Color(color) : new THREE.Color(0x000000),
+          emissiveIntensity: type.look.emissive ?? 0,
           roughness: type.look.roughness,
           metalness: type.look.metalness,
           clearcoat: type.look.clearcoat,
@@ -310,6 +335,7 @@ export function spawnMarble(
   return {
     id: nextId++,
     type: type.id,
+    displayColor: marbleDisplayColor(type.id, color),
     shape,
     body,
     collider,

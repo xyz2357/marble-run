@@ -85,16 +85,26 @@ export function sweepStations(stations: Station[], profile: Profile | ((t: numbe
   const n = profileAt(0).length;
   const positions: number[] = [];
   const indices: number[] = [];
+  // UVs in metres: u runs along the path, v across the section. Textures can then tile at a real
+  // size (one wood tile per metre) whatever the segment count, and the grain follows the track.
+  const uvs: number[] = [];
+  let along = 0;
 
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
     const { pos, side, up } = stations[i];
-    for (const [s, u] of profileAt(t)) {
+    if (i > 0) along += pos.distanceTo(stations[i - 1].pos);
+    const ring = profileAt(t);
+    let across = 0;
+    for (let j = 0; j < ring.length; j++) {
+      const [s, u] = ring[j];
+      if (j > 0) across += Math.hypot(s - ring[j - 1][0], u - ring[j - 1][1]);
       positions.push(
         pos.x + side.x * s + up.x * u,
         pos.y + side.y * s + up.y * u,
         pos.z + side.z * s + up.z * u,
       );
+      uvs.push(along, across);
     }
   }
   for (let i = 0; i < segments; i++) {
@@ -119,6 +129,7 @@ export function sweepStations(stations: Station[], profile: Profile | ((t: numbe
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;
@@ -222,17 +233,24 @@ export function helixPath(
 export function mergeGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const positions: number[] = [];
   const indices: number[] = [];
+  const uvs: number[] = [];
   let offset = 0;
   for (const g of geos) {
     const p = g.getAttribute('position');
+    const uv = g.getAttribute('uv');
     const idx = g.getIndex();
     if (!idx) throw new Error('mergeGeometries requires indexed geometry');
-    for (let i = 0; i < p.count; i++) positions.push(p.getX(i), p.getY(i), p.getZ(i));
+    for (let i = 0; i < p.count; i++) {
+      positions.push(p.getX(i), p.getY(i), p.getZ(i));
+      // BoxGeometry brings 0..1 UVs per face; anything without them gets a flat corner.
+      uvs.push(uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0);
+    }
     for (let i = 0; i < idx.count; i++) indices.push(idx.getX(i) + offset);
     offset += p.count;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;

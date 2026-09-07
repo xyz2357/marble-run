@@ -46,6 +46,52 @@ export function createPanel(editor: Editor, game: Game): void {
         <button data-action="download">导出</button>
         <button data-action="import">导入</button>
         <input id="import-file" type="file" accept="application/json,.json" hidden />
+        <button data-action="help" title="快捷键和玩法说明（? 或 H）">?</button>
+      </div>
+    </div>
+    <div id="help" hidden>
+      <h3>怎么玩<button data-action="help-close" title="Esc">✕</button></h3>
+      <div class="cols">
+        <section>
+          <h4>两种搭建方式</h4>
+          <dl>
+            <dt>接龙</dt><dd>新零件自动接到橙色接口上，最省事</dd>
+            <dt>自由</dt><dd>鼠标指哪放哪，靠近接口时会吸附</dd>
+          </dl>
+          <h4>编辑</h4>
+          <dl>
+            <dt><kbd>1</kbd>–<kbd>9</kbd></dt><dd>选零件（零件栏左上角的数字）</dd>
+            <dt><kbd>Enter</kbd></dt><dd>放下当前零件</dd>
+            <dt><kbd>R</kbd></dt><dd>换接法 / 旋转选中的零件</dd>
+            <dt><kbd>V</kbd></dt><dd>换规格：电梯高度、螺旋圈数、闸门快慢、电梯玻璃或实心</dd>
+            <dt><kbd>Q</kbd> <kbd>E</kbd></dt><dd>升降一层（选中零件时移动它）</dd>
+            <dt><kbd>Backspace</kbd></dt><dd>撤掉刚放的一块</dd>
+            <dt><kbd>Delete</kbd></dt><dd>删除选中的零件</dd>
+            <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd></dt><dd>撤销 / 重做</dd>
+            <dt><kbd>Esc</kbd></dt><dd>取消选择</dd>
+          </dl>
+        </section>
+        <section>
+          <h4>视角</h4>
+          <dl>
+            <dt>拖动 / 滚轮</dt><dd>旋转 / 缩放</dd>
+            <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>平移</dd>
+            <dt><kbd>F</kbd></dt><dd>看全图</dd>
+          </dl>
+          <h4>试玩<span class="tag">Tab 切换</span></h4>
+          <dl>
+            <dt><kbd>Space</kbd></dt><dd>放 1 颗</dd>
+            <dt><kbd>B</kbd></dt><dd>放 8 颗</dd>
+            <dt><kbd>N</kbd></dt><dd>连发</dd>
+            <dt><kbd>R</kbd></dt><dd>重置</dd>
+            <dt><kbd>T</kbd></dt><dd>慢动作</dd>
+            <dt><kbd>C</kbd></dt><dd>相机跟随领先的弹珠</dd>
+            <dt><kbd>P</kbd></dt><dd>暂停</dd>
+            <dt><kbd>M</kbd></dt><dd>静音</dd>
+          </dl>
+          <h4>弹珠</h4>
+          <p>底部下拉可换：玻璃珠是标准，钢珠更沉更快，橡胶珠抓地、落地会弹，发光珠会亮，还有鸡蛋。</p>
+        </section>
       </div>
     </div>
     <div id="variants" hidden><span class="name"></span><span class="buttons"></span></div>
@@ -111,6 +157,18 @@ export function createPanel(editor: Editor, game: Game): void {
     variantButtons.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.classList.toggle('active', b.dataset.variant === ctx!.id));
   };
 
+  const help = root.querySelector<HTMLDivElement>('#help')!;
+  const toggleHelp = (on = help.hidden) => {
+    help.hidden = !on;
+  };
+  // ? and H open it; Esc closes. The editor ignores keys typed into inputs, and so does this.
+  window.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+    if (e.key === '?' || e.key.toLowerCase() === 'h') toggleHelp();
+    else if (e.key === 'Escape' && !help.hidden) toggleHelp(false);
+  });
+
   // Demo picker: loading resets the select so picking the same demo twice works.
   const demoSelect = root.querySelector<HTMLSelectElement>('#demo-select')!;
   demoSelect.addEventListener('change', () => {
@@ -170,6 +228,12 @@ export function createPanel(editor: Editor, game: Game): void {
           break;
         case 'frame':
           game.frameTrack();
+          break;
+        case 'help':
+          toggleHelp();
+          break;
+        case 'help-close':
+          toggleHelp(false);
           break;
         case 'clear':
           if (game.track.pieces.length === 0 || confirm('清空整条轨道？（可撤销）')) editor.clear();

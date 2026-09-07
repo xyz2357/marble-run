@@ -82,6 +82,29 @@
     #race li .time { margin-left: auto; }
     #race .empty { color: var(--muted); }
 
+    #help { position: fixed; inset: 50% auto auto 50%; transform: translate(-50%, -50%); z-index: 20;
+            width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 80px); overflow-y: auto;
+            padding: 4px 20px 18px; background: var(--panel); border: 1px solid var(--panel-border);
+            border-radius: 12px; backdrop-filter: blur(10px); box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+            scrollbar-width: thin; }
+    #help h3 { display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0;
+               margin: 0 -20px 12px; padding: 14px 20px 10px; font-size: 15px; background: var(--panel);
+               border-bottom: 1px solid var(--panel-border); }
+    #help h3 button { background: rgba(255,255,255,0.06); color: var(--text); border: none; border-radius: 6px;
+                      padding: 3px 9px; cursor: pointer; font-size: 13px; }
+    #help h3 button:hover { background: rgba(255,255,255,0.16); }
+    #help .cols { display: flex; gap: 28px; flex-wrap: wrap; }
+    #help section { flex: 1 1 300px; min-width: 260px; }
+    #help h4 { margin: 14px 0 6px; font-size: 13px; color: var(--accent); font-weight: 600; }
+    #help h4:first-child { margin-top: 0; }
+    #help .tag { margin-left: 8px; color: var(--muted); font-weight: 400; font-size: 11px; }
+    #help dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 13px; }
+    #help dt { color: var(--text); white-space: nowrap; }
+    #help dd { margin: 0; color: var(--muted); }
+    #help p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    #help kbd { font: 11px/1.6 ui-monospace, monospace; background: rgba(255,255,255,0.1);
+                border: 1px solid var(--panel-border); border-radius: 4px; padding: 1px 5px; }
+
     #variants { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px;
       padding: 4px 8px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; font-size: 13px; }
     #variants .name { color: var(--muted); margin-right: 4px; }

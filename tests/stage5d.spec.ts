@@ -1,13 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
 
-type M = { id: number; type: string; shape: string; x: number; y: number; z: number; vx: number; vy: number; vz: number };
+type M = { id: number; type: string; shape: string; color: number; displayColor: number; x: number; y: number; z: number; vx: number; vy: number; vz: number };
 type Placed = { def: string; cell: { x: number; z: number }; level: number; rot: number };
 type Seam = {
   ready: boolean;
   pause: () => void;
   stepN: (n: number) => void;
   marbles: () => M[];
-  results: () => { id: number; time: number }[];
+  results: () => { id: number; color: number; time: number }[];
   spawnAtStart: () => number[];
   clearMarbles: () => void;
   importJSON: (t: string) => void;
@@ -92,7 +92,7 @@ test('the play bar offers every marble type and remembers the choice', async ({ 
   await page.goto('/');
   await page.waitForFunction(() => window.__TEST__?.ready === true, null, { timeout: 30_000 });
   const types = await page.evaluate(() => window.__TEST__.marbleTypes());
-  expect(types.map((t) => t.id)).toEqual(['glass', 'steel', 'rubber', 'egg']);
+  expect(types.map((t) => t.id)).toEqual(['glass', 'steel', 'rubber', 'glow', 'egg']);
   // Steel is the heavy one, rubber the grippy one; glass is unchanged from before there were types.
   expect(types.find((t) => t.id === 'steel')!.density).toBeGreaterThan(types.find((t) => t.id === 'glass')!.density * 2);
   expect(types.find((t) => t.id === 'rubber')!.friction).toBeGreaterThan(types.find((t) => t.id === 'glass')!.friction);
@@ -103,7 +103,7 @@ test('the play bar offers every marble type and remembers the choice', async ({ 
     friction: 0.6,
   });
 
-  await expect(page.locator('#playbar select[data-play="shape"] option')).toHaveCount(4);
+  await expect(page.locator('#playbar select[data-play="shape"] option')).toHaveCount(5);
   await page.evaluate(() => window.__TEST__.setMode('play'));
   await page.selectOption('#playbar select[data-play="shape"]', 'steel');
   expect(await page.evaluate(() => window.__TEST__.shape())).toBe('steel');
@@ -153,6 +153,22 @@ test('steel wins the seesaw, rubber loses it', async ({ page }) => {
   console.log(`seesaw track: glass ${times.glass.toFixed(2)}s  steel ${times.steel.toFixed(2)}s  rubber ${times.rubber.toFixed(2)}s`);
   expect(times.steel, 'the heavy marble is fastest').toBeLessThan(times.glass * 0.98);
   expect(times.rubber, 'the grippy, heavily damped one is slowest').toBeGreaterThan(times.glass * 1.05);
+});
+
+test('the glow marble runs like glass, and the race list shows the colour you see', async ({ page }) => {
+  const errors = await loadTrack(page, DROP, 'glow');
+  const { time } = await runOne(page, 2.2);
+  expect(time, 'the glow marble is a glass marble that lights up').toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+
+  // Steel tints its race colour towards grey, so the race dot has to use the tinted one or it
+  // names a colour that is not on the table.
+  await loadTrack(page, DROP, 'steel');
+  const m = (await page.evaluate(() => window.__TEST__.marbles()))[0];
+  expect(m.displayColor, 'steel is not drawn in its raw race colour').not.toBe(m.color);
+  await runOne(page, 2.2);
+  const [result] = await page.evaluate(() => window.__TEST__.results());
+  expect(result.color, 'the race list uses the rendered colour').toBe(m.displayColor);
 });
 
 test('rubber bounces on landing, glass and steel do not', async ({ page }) => {
