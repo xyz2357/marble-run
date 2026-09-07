@@ -4,7 +4,7 @@
 
 在线试玩：https://xyz2357.github.io/marble-run/ （push 到 master 后由 GitHub Actions 自动构建发布）
 
-分阶段计划与进度见 [PLAN.md](PLAN.md)；接手开发看 [GUIDE.md](GUIDE.md) 和 [HANDOFF.md](HANDOFF.md)。
+分阶段计划与进度见 [PLAN.md](PLAN.md)。
 
 ## 运行
 
