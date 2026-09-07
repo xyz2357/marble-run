@@ -126,23 +126,37 @@ function makeFlap(ctx: MechanismContext, random = false): Mechanism {
   ctx.root.add(mesh);
   ctx.bind(body, mesh);
 
-  // Like a mechanical toggle: the flap only flips once a marble has gone past it, and
-  // only when no other marble is still in the flap zone (a closely following marble
-  // would otherwise be squeezed between the swinging flap and the rail).
+  // Like a mechanical toggle: the flap only flips once a marble has gone past it.
   const zone = new THREE.Box3(v3(-0.6, -0.2, -1.2), v3(FLAP_PIVOT.x + 0.15, 0.9, 1.2));
+  /**
+   * The blade itself: a flip while a marble is anywhere over it throws the marble sideways at
+   * up to 10 m/s (the tip travels at 9 m/s), so the flap waits for this to be clear. Only the
+   * blade counts, not the approach behind it, so a marble still queueing at the entry does not
+   * hold the flip up.
+   *
+   * Under a dense burst (0.35 s apart is about 0.9 m, shorter than the 1.05 m blade) this is
+   * never clear, so the flap stays put and the whole burst takes one branch. Fixing that needs
+   * a different mechanism, not a smaller zone - see the note on splitterDef.
+   */
+  const sweepZone = new THREE.Box3(v3(-0.2, -0.2, -0.6), v3(FLAP_PIVOT.x + 0.15, 0.9, 0.6));
   const inside = new Set<number>();
   let pendingFlip = false;
   let side: 1 | -1 = random && Math.random() < 0.5 ? -1 : 1; // branch the current flap position sends marbles to
   let angle = -side * FLAP_ANGLE;
   let target = angle;
   const local = new THREE.Vector3();
+  const seen = new Set<number>();
   const inv = ctx.quat.clone().invert();
   const q = new THREE.Quaternion();
 
   return {
     update(dt, marbles) {
+      let overTip = false;
+      seen.clear();
       for (const m of marbles) {
+        seen.add(m.id);
         local.copy(m.pos).sub(ctx.origin).applyQuaternion(inv);
+        if (sweepZone.containsPoint(local)) overTip = true;
         const now = zone.containsPoint(local);
         if (now && !inside.has(m.id)) {
           inside.add(m.id);
@@ -151,7 +165,11 @@ function makeFlap(ctx: MechanismContext, random = false): Mechanism {
           if (local.x > FLAP_PIVOT.x + 0.15) pendingFlip = true; // went through: flip for the next marble
         }
       }
-      if (pendingFlip && inside.size === 0) {
+      // Forget marbles that vanished while inside the zone (reset, or evicted at MAX_MARBLES).
+      // Without this their ids linger forever and the flap never flips again - the piece looked
+      // like it only worked once, until the track was reloaded.
+      for (const id of inside) if (!seen.has(id)) inside.delete(id);
+      if (pendingFlip && !overTip) {
         pendingFlip = false;
         side = random ? (Math.random() < 0.5 ? -1 : 1) : side === 1 ? -1 : 1;
         target = -side * FLAP_ANGLE;

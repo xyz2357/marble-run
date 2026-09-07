@@ -38,6 +38,17 @@ export const MATERIALS: Record<MaterialKey, THREE.Material> = {
   dark: new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.9, side: THREE.DoubleSide, flatShading: true }),
   accent: new THREE.MeshStandardMaterial({ color: 0xe0574f, roughness: 0.7, side: THREE.DoubleSide }),
   goal: new THREE.MeshStandardMaterial({ color: 0x3ec46d, roughness: 0.7, side: THREE.DoubleSide }),
+  // Tinted glass for shafts and casings. depthWrite off so the marble behind the near wall is
+  // not hidden by it; shadows are skipped for these parts (see `place`) or they read as solid.
+  glass: new THREE.MeshStandardMaterial({
+    color: 0x9fd0e8,
+    roughness: 0.1,
+    metalness: 0,
+    transparent: true,
+    opacity: 0.28,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  }),
 };
 
 const colouredCache = new Map<string, THREE.Material>();
@@ -79,8 +90,9 @@ export class Track {
     group.quaternion.copy(quat);
     for (const part of built.parts) {
       const mesh = new THREE.Mesh(part.geometry, materialFor(part));
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
+      // A see-through part that cast or received shadows would read as solid again.
+      mesh.castShadow = part.material !== 'glass';
+      mesh.receiveShadow = part.material !== 'glass';
       group.add(mesh);
     }
     this.root.add(group);

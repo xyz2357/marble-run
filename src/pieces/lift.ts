@@ -71,7 +71,7 @@ export function liftDef(levels: number): PieceDef {
         // Back wall at the top so marbles cannot roll off the -X side of the exit deck region.
         boxGeo(v3(CAR_X0 - 0.03, rise + 0.2, 0), v3(0.03, 0.25, 0.42)),
       ]);
-      parts.push({ geometry: walls, material: 'dark' });
+      parts.push({ geometry: walls, material: 'glass' });
       // Shaft floor (visual + catches anything that slips), and a roof cap.
       parts.push({ geometry: boxGeo(v3(mid(CAR_X0, CAR_X1), shaftBottom - 0.02, 0), v3(half(CAR_X0, CAR_X1) + 0.06, 0.02, 0.42)), material: 'dark' });
 

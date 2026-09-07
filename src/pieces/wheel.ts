@@ -93,8 +93,8 @@ export function wheelDef(period = 5): PieceDef {
       parts: [
         { geometry: entry, material: 'wood' },
         { geometry: exit, material: 'wood' },
-        { geometry: casing, material: 'dark' },
-        { geometry: stop, material: 'dark' },
+        { geometry: casing, material: 'glass' },
+        { geometry: stop, material: 'glass' },
         { geometry: stand, material: 'dark', collide: false },
         { geometry: axle, material: 'dark', collide: false },
       ],

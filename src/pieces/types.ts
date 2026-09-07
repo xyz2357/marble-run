@@ -15,7 +15,8 @@ export interface PortDef {
   kind: PortKind;
 }
 
-export type MaterialKey = 'wood' | 'dark' | 'accent' | 'goal';
+/** `glass` is see-through: use it for casings and shafts that would otherwise hide the marble. */
+export type MaterialKey = 'wood' | 'dark' | 'accent' | 'goal' | 'glass';
 
 export interface MeshPart {
   /**

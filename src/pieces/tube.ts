@@ -8,9 +8,12 @@ const R_MID = 0.3;
  *  trough (up to 0.20 off the centre line) flies in instead of hitting the rim. */
 const R_END = 0.37;
 const WALL = 0.04;
-/** Half-angle of the slit along the top. Even at the widest mouth the opening is 0.25 m
- *  across, narrower than the marble, so nothing escapes; it is what you see through. */
-const SLIT = THREE.MathUtils.degToRad(20);
+/**
+ * Half-angle of the seam along the top. The section has to stay ONE closed polygon for `sweep`
+ * (outer ring out, inner ring back), so the annulus cannot fully close - but 2.5 degrees is a
+ * 15 mm hairline, and the tube reads as shut. You see the marble through the glass, not a slot.
+ */
+const SLIT = THREE.MathUtils.degToRad(2.5);
 const RING = 24;
 /** Fraction of the length each mouth's flare takes. */
 const FLARE = 0.15;
@@ -56,7 +59,7 @@ export const tubeDef: PieceDef = {
   build() {
     return {
       parts: [
-        { geometry: sweep(linePath(v3(-0.5, 0, 0), v3(0.5, 0, 0)), 20, tubeProfile), material: 'accent', color: 0x8fb8d8 },
+        { geometry: sweep(linePath(v3(-0.5, 0, 0), v3(0.5, 0, 0)), 20, tubeProfile), material: 'glass' },
       ],
     };
   },
@@ -79,7 +82,7 @@ export const tubeSlopeDef: PieceDef = {
   build() {
     return {
       parts: [
-        { geometry: sweep(slopePath(v3(-0.5, H, 0), v3(1.5, 0, 0)), 32, tubeProfile), material: 'accent', color: 0x8fb8d8 },
+        { geometry: sweep(slopePath(v3(-0.5, H, 0), v3(1.5, 0, 0)), 32, tubeProfile), material: 'glass' },
       ],
     };
   },
