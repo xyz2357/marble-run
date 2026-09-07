@@ -23,7 +23,8 @@ export function buildDemoTrack(track: Track): void {
 /** Demo 2: mechanisms. Lift -> xylophone -> seesaw -> gate -> splitter -> two ends, plus a vortex on one branch. */
 export function buildMechanismDemo(track: Track): void {
   const b = new ChainBuilder(track);
-  b.begin({ def: 'start', cell: { x: -3, z: 0 }, level: 1, rot: 0 })
+  // Level 2, not 1: the lift's shaft hangs one level below its anchor (see liftDef.depthUnits).
+  b.begin({ def: 'start', cell: { x: -3, z: 0 }, level: 2, rot: 0 })
     .add('slope_steep')
     .add('lift10')
     .add('xylophone')

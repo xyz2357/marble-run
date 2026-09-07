@@ -194,11 +194,12 @@ export class Track {
   }
 
   /**
-   * True if the piece can be placed: nothing of it below the ground (level >= 0 and every port at or
-   * above y = 0) and no overlap with existing pieces (optionally ignoring one).
+   * True if the piece can be placed: nothing of it below the ground (its anchor, its body's
+   * `depthUnits` below that, and every port all at or above y = 0) and no overlap with existing
+   * pieces (optionally ignoring one).
    */
   canPlace(def: PieceDef, placed: PlacedPiece, ignore?: TrackPieceInstance): boolean {
-    if (placed.level < 0) return false;
+    if (placed.level - (def.depthUnits ?? 0) < 0) return false;
     if (worldPorts(def, placed).some((p) => p.pos.y < -1e-6)) return false;
     const occ = this.occupiedMap();
     return slotKeys(def, placed).every((k) => {

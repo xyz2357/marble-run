@@ -29,18 +29,24 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
  * floor. The car rises `levels` levels and the marbles roll out onto the exit
  * deck. Lets a track loop back to its start.
  */
-export function liftDef(levels: number): PieceDef {
+export function liftDef(levels: number, solid = false): PieceDef {
   const rise = levels * H;
   const travel = rise + EXIT_DROP + TOP_LIP - (FLOOR_Y0 - FLOOR_DROP); // exit-side floor edge stops just above the deck start
   return {
-    id: `lift${levels}`,
-    name: `电梯 ↑${levels}`,
-    family: { id: 'lift', label: `↑${levels}` },
+    // `solid` only swaps the shaft walls' material. It is a separate family member rather than a
+    // stored setting so a saved track stays a list of piece ids - see the note in registry.ts.
+    id: solid ? `lift${levels}_solid` : `lift${levels}`,
+    name: solid ? `电梯 ↑${levels}（实心）` : `电梯 ↑${levels}`,
+    family: { id: 'lift', label: solid ? `↑${levels} 实心` : `↑${levels} 玻璃` },
     footprint: [
       { x: 0, z: 0 },
       { x: 1, z: 0 },
     ],
     heightUnits: levels + 1,
+    // The entry approach drops to FLOOR_Y0 and the shaft floor sits 0.5 m under the anchor, so
+    // the whole piece has to start one level up or the ground plane cuts through the approach
+    // and marbles roll to a stop on the ground instead of onto the car.
+    depthUnits: 1,
     ports: [
       { pos: v3(-0.5, 0, 0), dir: v3(-1, 0, 0), kind: 'in' },
       { pos: v3(1.5, rise, 0), dir: v3(1, 0, 0), kind: 'out' },
@@ -71,7 +77,7 @@ export function liftDef(levels: number): PieceDef {
         // Back wall at the top so marbles cannot roll off the -X side of the exit deck region.
         boxGeo(v3(CAR_X0 - 0.03, rise + 0.2, 0), v3(0.03, 0.25, 0.42)),
       ]);
-      parts.push({ geometry: walls, material: 'glass' });
+      parts.push({ geometry: walls, material: solid ? 'dark' : 'glass' });
       // Shaft floor (visual + catches anything that slips), and a roof cap.
       parts.push({ geometry: boxGeo(v3(mid(CAR_X0, CAR_X1), shaftBottom - 0.02, 0), v3(half(CAR_X0, CAR_X1) + 0.06, 0.02, 0.42)), material: 'dark' });
 
@@ -173,7 +179,12 @@ function makeLift(ctx: MechanismContext, travel: number): Mechanism {
         }
       }
       const speed = dt / 0.3;
-      if (!blocked) gateDown += THREE.MathUtils.clamp(wantDown - gateDown, -speed, speed);
+      // A marble over the bar must never be lifted by it. Freezing the bar where it stands is not
+      // enough: a marble that comes to rest on a half-raised bar is then wedged, the closing phase
+      // below never completes, and the lift stops cycling for good. Drop the bar back open instead
+      // - lowering away from a marble is always safe - and let it roll on to the car.
+      const goal = blocked ? 1 : wantDown;
+      gateDown += THREE.MathUtils.clamp(goal - gateDown, -speed, speed);
       const closingPhase = t >= T_BOTTOM && t < T_BOTTOM + T_CLOSE;
       if (closingPhase && gateDown > 0.001) t = Math.min(t + dt, T_BOTTOM + T_CLOSE - 0.001); // wait until shut
       else t = (t + dt) % CYCLE;

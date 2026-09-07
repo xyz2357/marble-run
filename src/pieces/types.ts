@@ -84,6 +84,12 @@ export interface PieceDef {
   footprint: { x: number; z: number }[];
   /** Vertical extent in H units above the anchor level (informational). */
   heightUnits: number;
+  /**
+   * How far the piece's geometry reaches BELOW its anchor level, in H units. Only pieces whose
+   * body hangs under their lowest port need it (the lift's shaft), and it keeps them from being
+   * placed where the ground plane - whose top face is at y = 0 - would cut through them.
+   */
+  depthUnits?: number;
   ports: PortDef[];
   /**
    * Pieces that are the same thing in different sizes / settings (helix x1/x2/x3, lift heights)

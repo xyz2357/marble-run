@@ -14,6 +14,16 @@ type Seam = {
   setMode: (m: 'edit' | 'play') => void;
   openPortsScreen: () => unknown[];
   lookAt: (x: number, y: number, z: number, dist: number) => void;
+  pick: (i: number | null) => void;
+  picked: () => Placed | null;
+  variants: () => string[];
+  setVariant: (id: string) => boolean;
+  clearTrack: () => void;
+  setToolMode: (m: 'chain' | 'free') => void;
+  setLevel: (n: number) => void;
+  select: (id: string | null) => void;
+  candidate: () => { valid: boolean } | null;
+  pieces: () => Placed[];
 };
 declare global {
   interface Window {
@@ -102,6 +112,67 @@ test('a dense burst still crosses the splitter safely, even though it cannot alt
   // Marbles arrive at about 2.9 m/s; anything much above that means the flap hit one.
   expect(maxSpeed).toBeLessThan(4);
   expect(errors).toEqual([]);
+});
+
+test('a lift cannot be placed at level 0, where the ground would cut through its shaft', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.__TEST__?.ready === true, null, { timeout: 30_000 });
+  await page.evaluate(() => {
+    window.__TEST__.clearTrack();
+    window.__TEST__.setToolMode('free');
+    window.__TEST__.select('lift6');
+  });
+  // The shaft hangs one level below the anchor, so level 0 is underground and level 1 is not.
+  await page.evaluate(() => window.__TEST__.setLevel(0));
+  await page.mouse.move(640, 420);
+  expect((await page.evaluate(() => window.__TEST__.candidate()))?.valid, 'level 0 is rejected').toBe(false);
+  await page.evaluate(() => window.__TEST__.setLevel(1));
+  await page.mouse.move(640, 420);
+  expect((await page.evaluate(() => window.__TEST__.candidate()))?.valid, 'level 1 is allowed').toBe(true);
+});
+
+test('lift shaft finish is a family variant: glass and solid both deliver', async ({ page }) => {
+  const errors = await loadTrack(page, [
+    { def: 'start', cell: { x: 0, z: 0 }, level: 2, rot: 0 },
+    { def: 'slope_steep', cell: { x: 1, z: 0 }, level: 1, rot: 0 },
+    { def: 'lift6_solid', cell: { x: 2, z: 0 }, level: 1, rot: 0 },
+    { def: 'slope', cell: { x: 4, z: 0 }, level: 6, rot: 0 },
+    { def: 'end', cell: { x: 6, z: 0 }, level: 6, rot: 0 },
+  ]);
+  await page.evaluate(() => window.__TEST__.spawnBurst(2, 2));
+  let done = false;
+  for (let i = 0; i < 900 && !done; i++) {
+    await page.evaluate(() => window.__TEST__.stepN(12));
+    done = (await page.evaluate(() => window.__TEST__.results().length)) >= 2;
+  }
+  expect(done, 'the solid-shaft lift delivers just like the glass one').toBe(true);
+  expect(errors).toEqual([]);
+  await page.evaluate(() => window.__TEST__.lookAt(2.5, 2, 0, 6));
+  await page.screenshot({ path: 'test-results/stage5c-lift-solid.png' });
+});
+
+test('V switches a placed lift between glass and solid without moving it', async ({ page }) => {
+  await loadTrack(page, [
+    { def: 'start', cell: { x: 0, z: 0 }, level: 2, rot: 0 },
+    { def: 'slope_steep', cell: { x: 1, z: 0 }, level: 1, rot: 0 },
+    { def: 'lift6', cell: { x: 2, z: 0 }, level: 1, rot: 0 },
+    { def: 'slope', cell: { x: 4, z: 0 }, level: 6, rot: 0 },
+    { def: 'end', cell: { x: 6, z: 0 }, level: 6, rot: 0 },
+  ]);
+  await page.evaluate(() => window.__TEST__.setMode('edit'));
+  await page.evaluate(() => window.__TEST__.pick(2));
+  // Eight members: four heights, each with a glass and a solid shaft, paired.
+  expect(await page.evaluate(() => window.__TEST__.variants())).toEqual([
+    'lift4', 'lift4_solid', 'lift6', 'lift6_solid', 'lift8', 'lift8_solid', 'lift10', 'lift10_solid',
+  ]);
+  const before = await page.evaluate(() => window.__TEST__.picked());
+  expect(await page.evaluate(() => window.__TEST__.setVariant('lift6_solid'))).toBe(true);
+  const after = await page.evaluate(() => window.__TEST__.picked());
+  expect(after!.def).toBe('lift6_solid');
+  // Same cell, level and rotation: only the finish changed.
+  expect({ ...after!, def: '' }).toEqual({ ...before!, def: '' });
+  // The track is still closed, so swapping the finish did not move any port.
+  expect(await page.evaluate(() => window.__TEST__.openPortsScreen())).toHaveLength(0);
 });
 
 test('glass shafts keep their colliders: the lift still carries marbles up', async ({ page }) => {
