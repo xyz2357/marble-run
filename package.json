@@ -1,7 +1,7 @@
 {
   "name": "marble-run",
   "version": "1.0.0",
-  "description": "",
+  "description": "Browser 3D marble run: build tracks from pieces and race marbles (Three.js + Rapier)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,7 +11,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",

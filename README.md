@@ -2,6 +2,8 @@
 
 浏览器里玩的 3D 弹珠轨道拼装游戏。Three.js 渲染，Rapier3D（WASM）物理，Vite + TypeScript，Playwright 做回归测试和截图。
 
+在线试玩：https://xyz2357.github.io/marble-run/ （push 到 master 后由 GitHub Actions 自动构建发布）
+
 分阶段计划与进度见 [PLAN.md](PLAN.md)。
 
 ## 运行

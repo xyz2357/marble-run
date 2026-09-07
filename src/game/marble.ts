@@ -62,7 +62,7 @@ eggGeo.computeVertexNormals();
  * Egg skin: the user's egg photo baked onto the lathe's UV layout by
  * scratch/make_egg_skin.py (face on the front half, shell colour elsewhere).
  */
-const eggTexture = new THREE.TextureLoader().load('/textures/egg-skin.png');
+const eggTexture = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}textures/egg-skin.png`);
 eggTexture.colorSpace = THREE.SRGBColorSpace;
 eggTexture.anisotropy = 4;
 
