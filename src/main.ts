@@ -20,10 +20,17 @@ async function boot(): Promise<void> {
 
   installTestSeam(game, editor);
   game.start();
+  document.getElementById('boot')?.remove();
 }
 
 boot().catch((err) => {
   console.error(err);
+  const splash = document.getElementById('boot');
+  if (splash) {
+    splash.classList.add('failed');
+    splash.querySelector('p')!.textContent = '启动失败';
+    splash.querySelector('small')!.textContent = String(err);
+  }
   const hud = document.getElementById('hud');
   if (hud) hud.textContent = `启动失败: ${err}`;
 });

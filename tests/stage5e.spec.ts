@@ -40,6 +40,21 @@ test('the help panel opens from the toolbar, from ? and H, and closes with Esc',
   expect(errors).toEqual([]);
 });
 
+test('the loading splash shows before the engine arrives and is gone after', async ({ page }) => {
+  // Hold the entry module back so the static splash is on screen on its own.
+  await page.route('**/src/main.ts', async (route) => {
+    await new Promise((r) => setTimeout(r, 1200));
+    await route.continue();
+  });
+  // 'commit' returns as soon as the HTML starts arriving, before the held-back module runs.
+  await page.goto('/', { waitUntil: 'commit' });
+  await expect(page.locator('#boot')).toBeVisible();
+  await expect(page.locator('#boot')).toContainText('加载中');
+  await page.screenshot({ path: 'test-results/stage5e-boot.png' });
+  await page.waitForFunction(() => window.__TEST__?.ready === true, null, { timeout: 30_000 });
+  await expect(page.locator('#boot')).toHaveCount(0);
+});
+
 test('the wood grain follows the track and the demos still build', async ({ page }) => {
   // The grain needs UVs, which `sweep` did not use to write. Physics reads position and index
   // only, so the whole suite is the real regression check; this one just looks at the result.

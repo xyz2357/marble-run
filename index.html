@@ -29,6 +29,15 @@
            background: var(--panel); border: 1px solid var(--panel-border); padding: 8px 12px; border-radius: 8px;
            pointer-events: none; white-space: pre; backdrop-filter: blur(6px); }
 
+    #boot { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 14px; background: #1b1d22; color: var(--muted); }
+    #boot p { margin: 0; font-size: 15px; color: var(--text); }
+    #boot small { font-size: 12px; }
+    #boot.failed .spinner { animation: none; border-color: rgba(224, 87, 79, 0.5); border-top-color: #e0574f; }
+    #boot .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.14);
+                     border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     #toolbar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px;
                background: var(--panel); border: 1px solid var(--panel-border); padding: 6px 8px; border-radius: 10px;
                backdrop-filter: blur(6px); }
@@ -127,6 +136,14 @@
   </style>
 </head>
 <body>
+  <!-- Static, so it paints before any script runs. The physics engine is a megabyte of gzipped
+       WASM and has to arrive before anything can be shown; without this the page is blank until
+       it does. main.ts removes it, or fills in the error if boot fails. -->
+  <div id="boot">
+    <div class="spinner"></div>
+    <p>加载中…</p>
+    <small>第一次打开要下载物理引擎，约 1 MB</small>
+  </div>
   <div id="app"></div>
   <div id="ui"></div>
   <div id="hud"></div>
