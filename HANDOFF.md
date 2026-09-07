@@ -2,9 +2,11 @@
 
 给下一段对话 / 下一个 Claude 会话的交接。读完这个 + README.md + PLAN.md 就能接着干。
 
+**接手的模型先读 GUIDE.md**（开工检查、加零件模板、物理探针、工具坑、Stage 5 任务拆解、禁止事项），再读本文。
+
 ## 当前状态
 
-- 本地 git，master，tag `stage-0` … `stage-4c`。无远端（gh 已登录 xyz2357，**推 GitHub 前必须问用户**）。
+- git 远端 `origin` = https://github.com/xyz2357/marble-run （公开），tag `stage-0` … `stage-4c`。push 到 master 会触发 GitHub Pages 自动发布到 https://xyz2357.github.io/marble-run/ ，**push 前必须问用户**。
 - `npm run dev` → http://localhost:5173；`npm test` → 34 条 Playwright 全过（workers=2，timeout 90 s；整套并发 4 会因机器慢而误报超时）。
 - Stage 0–4 完成（29 种零件 / 20 个零件栏条目，鸡蛋弹珠，3 条示例轨道）；Stage 5 未开始。
 
