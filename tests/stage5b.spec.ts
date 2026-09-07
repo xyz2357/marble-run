@@ -35,6 +35,7 @@ const DEMOS = [
   { n: 4, name: '变道与管道', deliver: 3, seconds: 60 },
   { n: 5, name: '快慢对决', deliver: 3, seconds: 60 },
   { n: 6, name: '规格巡礼', deliver: 3, seconds: 90 },
+  { n: 7, name: '环形与大水车', deliver: 3, seconds: 90 },
 ];
 
 async function boot(page: Page) {

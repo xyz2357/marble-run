@@ -126,6 +126,22 @@ export function buildVariantDemo(track: Track): void {
     .add('end');
 }
 
+/**
+ * Demo 7: the two big pieces back to back. The loop goes first on purpose - fed straight off the
+ * start it gets a steady, known entry speed, and its own ramp does the rest. Behind the wheel it
+ * was arriving with whatever the wheel and a slope happened to give it, and three marbles in a
+ * row only all got round about a third of the time. Then the wheel takes it down eight levels.
+ */
+export function buildLoopDemo(track: Track): void {
+  const b = new ChainBuilder(track);
+  b.begin({ def: 'start', cell: { x: -9, z: 0 }, level: 16, rot: 0 })
+    .add('loop')
+    .add('slope')
+    .add('wheel_big')
+    .add('slope')
+    .add('end');
+}
+
 export interface DemoDef {
   /** Label in the toolbar's demo picker. */
   name: string;
@@ -142,4 +158,5 @@ export const DEMOS: DemoDef[] = [
   { name: '示例 4 · 变道与管道', hint: 'S 弯、管道、管道斜坡', build: buildTubeDemo },
   { name: '示例 5 · 快慢对决', hint: '分叉 → 冰道+跳台 对 减速带 → 合流', build: buildRaceDemo },
   { name: '示例 6 · 规格巡礼', hint: '同族零件的其他规格：短电梯、双圈螺旋、快闸门、小水车', build: buildVariantDemo },
+  { name: '示例 7 · 环形与大水车', hint: '先翻一整圈，再让大水车一次降 8 层', build: buildLoopDemo },
 ];
