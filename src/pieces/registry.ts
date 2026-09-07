@@ -15,7 +15,10 @@ import { jumpDef } from './jump';
 import { helixDef } from './helix';
 import { liftDef } from './lift';
 import { seesawDef } from './seesaw';
+import { sCurveLeftDef, sCurveRightDef } from './scurve';
 import { mergeDef, splitterDef, splitterRandomDef } from './splitter';
+import { brakeDef, iceDef } from './surface';
+import { tubeDef, tubeSlopeDef } from './tube';
 import { wheelDef } from './wheel';
 import { vortexDef } from './vortex';
 import { xylophoneDef } from './xylophone';
@@ -31,6 +34,8 @@ const defs: PieceDef[] = [
   curveLeftDef,
   bigCurveRightDef,
   bigCurveLeftDef,
+  sCurveRightDef,
+  sCurveLeftDef,
   helixDef(1),
   helixDef(2),
   helixDef(3),
@@ -49,6 +54,10 @@ const defs: PieceDef[] = [
   gateDef(1.5),
   gateDef(3),
   gateDef(5),
+  iceDef,
+  brakeDef,
+  tubeDef,
+  tubeSlopeDef,
   xylophoneDef,
   jumpDef,
   wheelDef(5),

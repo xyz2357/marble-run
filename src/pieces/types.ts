@@ -29,6 +29,14 @@ export interface MeshPart {
   color?: number;
   /** false => visual only, no collider */
   collide?: boolean;
+  /**
+   * Surface friction override (default 0.35). A part that sets this gets the Min combine rule,
+   * so the value is a ceiling: 0 really is frictionless (ice), and a value above the marble's
+   * own friction simply leaves the marble's in charge.
+   */
+  friction?: number;
+  /** Surface restitution override (default 0.1), also combined with Min. */
+  restitution?: number;
 }
 
 /** What a mechanism factory gets to work with. */

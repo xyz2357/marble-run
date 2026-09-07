@@ -92,9 +92,12 @@ export class Track {
       if (part.collide === false) continue;
       const { vertices, indices } = trimeshArrays(part.geometry);
       const desc = RAPIER.ColliderDesc.trimesh(vertices, indices, RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES)
-        .setFriction(0.35)
-        .setRestitution(0.1)
+        .setFriction(part.friction ?? 0.35)
+        .setRestitution(part.restitution ?? 0.1)
         .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Min);
+      // A part that names its own friction owns it: Min makes 0 mean frictionless instead of
+      // averaging back up to half the marble's. Parts that stay silent keep the default average.
+      if (part.friction !== undefined) desc.setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min);
       this.physics.world.createCollider(desc, body);
     }
 

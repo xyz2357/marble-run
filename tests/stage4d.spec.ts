@@ -135,9 +135,9 @@ test('piece families: one palette entry per family, V switches the placed piece 
   expect(palette).not.toContain('helix2');
   expect(palette).not.toContain('lift10');
   expect(palette).not.toContain('splitter_rnd');
-  expect(palette.length).toBe(20);
+  expect(palette.length).toBe(23);
   // Only one palette button per family, and the variant bar lists the family.
-  expect(await page.locator('#palette .piece').count()).toBe(20);
+  expect(await page.locator('#palette .piece').count()).toBe(23);
   await page.evaluate(() => {
     window.__TEST__.setToolMode('free');
     window.__TEST__.setLevel(6);
