@@ -4,6 +4,7 @@ import type { Editor, Mode, ToolMode } from './editor/editor';
 import type { Game } from './game/game';
 import type { PlacedPiece } from './pieces/types';
 import { paletteDefs, variantsOf } from './pieces/registry';
+import { DEMOS } from './game/demo';
 
 /** Exposed on window.__TEST__ so Playwright can drive the game deterministically. */
 export function installTestSeam(game: Game, editor: Editor): void {
@@ -128,7 +129,8 @@ export function installTestSeam(game: Game, editor: Editor): void {
       game.track.load(data);
       game.frameTrack();
     },
-    loadDemo: (which: 1 | 2 | 3 = 1) => editor.loadDemo(which),
+    loadDemo: (which = 1) => editor.loadDemo(which),
+    demos: () => DEMOS.map((d) => d.name),
     /** Family variants offered for the picked / selected piece, and switching between them. */
     variants: () => (editor.variantContext ? variantsOf(editor.variantContext).map((d) => d.id) : []),
     setVariant: (id: string) => editor.setVariant(id),

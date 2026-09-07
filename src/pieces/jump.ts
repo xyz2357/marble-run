@@ -31,6 +31,10 @@ const T_RETURN = 0.3;
 /** A marble must sit in the pocket for this long before the button fires. */
 const DWELL = 0.2;
 const GATE_X = -0.3;
+/** Crest of the stop bar (its upper -X corner after the tilt) and the top of the catch tray's
+ *  back wall: the two lips of the notch the ramp below fills in. */
+const NOTCH_FROM = v3(0.432, 0.366, 0);
+const NOTCH_TO = v3(0.6, 0.485, 0);
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 const chutePath = bezierPath(v3(-0.5, H, 0), v3(-0.2, H, 0), POCKET_END.clone().addScaledVector(ALONG, -0.3), POCKET_END);
@@ -105,6 +109,18 @@ export const jumpDef: PieceDef = {
       return [s * (0.44 / TROUGH_HALF), u < 0.2 ? Math.abs(s) * 0.05 : 0.55];
     });
     const catchTray = sweep(slopePath(v3(0.6, 0.16, 0), v3(3.5, 0, 0)), 40, (t) => lerpProfile(wide, TRACK_PROFILE, smooth(THREE.MathUtils.clamp((t - 0.55) / 0.45, 0, 1))));
+    // Fill the V between the stop bar's top edge and the catch tray's back wall. Without it a
+    // marble that clears the bar but not the wall balances on the bar's top corner: it is then
+    // outside the pocket, so the spring never fires, yet inside the gate's "busy" zone, so the
+    // gate never reopens and the whole track jams behind it. The fill is a 35-degree ramp from
+    // the bar's crest up to the wall top, steeper than anything a ball can rest on, so a marble
+    // landing there rolls back over the crest into the pocket and gets launched again.
+    const rampLen = Math.hypot(NOTCH_TO.x - NOTCH_FROM.x, NOTCH_TO.y - NOTCH_FROM.y);
+    const rampAngle = Math.atan2(NOTCH_TO.y - NOTCH_FROM.y, NOTCH_TO.x - NOTCH_FROM.x);
+    const ramp = new THREE.BoxGeometry(rampLen, 0.1, 0.76);
+    ramp.translate(0, -0.05, 0); // top face through the origin
+    ramp.rotateZ(rampAngle);
+    ramp.translate((NOTCH_FROM.x + NOTCH_TO.x) / 2, (NOTCH_FROM.y + NOTCH_TO.y) / 2, 0);
     // Back wall of the catch tray, side walls beside the pocket, floor under it.
     const walls = mergeGeometries([
       boxGeo(v3(0.62, 0.2, 0), v3(0.02, 0.3, 0.5)),
@@ -116,6 +132,7 @@ export const jumpDef: PieceDef = {
       parts: [
         { geometry: chute, material: 'wood' },
         { geometry: bar, material: 'dark' },
+        { geometry: ramp, material: 'dark' },
         { geometry: catchTray, material: 'wood' },
         { geometry: walls, material: 'dark' },
       ],

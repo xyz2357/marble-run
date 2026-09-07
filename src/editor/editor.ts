@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from '../game/game';
-import { buildDemoTrack, buildJumpDemo, buildMechanismDemo } from '../game/demo';
+import { DEMOS } from '../game/demo';
 import { snapSolutions, type TrackPieceInstance } from '../game/track';
 import { getPiece, paletteDefs, PIECES, variantsOf } from '../pieces/registry';
 import { CELL, H, worldPorts, type PieceDef, type PlacedPiece, type WorldPort } from '../pieces/types';
@@ -350,12 +350,12 @@ export class Editor {
     this.afterMutation();
   }
 
-  loadDemo(which: 1 | 2 | 3 = 1): void {
+  /** Load a preset track by its 1-based index in DEMOS. */
+  loadDemo(which = 1): void {
+    const demo = DEMOS[which - 1] ?? DEMOS[0];
     this.pushUndo();
     this.game.track.clear();
-    if (which === 3) buildJumpDemo(this.game.track);
-    else if (which === 2) buildMechanismDemo(this.game.track);
-    else buildDemoTrack(this.game.track);
+    demo.build(this.game.track);
     this.game.frameTrack();
     this.afterMutation();
   }

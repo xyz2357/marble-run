@@ -1,5 +1,6 @@
 import { PIECE_KEYS, type Editor } from '../editor/editor';
 import type { Game } from '../game/game';
+import { DEMOS } from '../game/demo';
 import { paletteDefs, PIECES, sameFamily, variantsOf } from '../pieces/registry';
 import { createPlayBar } from './playbar';
 import { renderThumbnails } from './thumbs';
@@ -35,9 +36,10 @@ export function createPanel(editor: Editor, game: Game): void {
         <button data-action="frame" title="F">看全图</button>
       </div>
       <div class="group">
-        <button data-action="demo">示例 1</button>
-        <button data-action="demo2" title="机关演示：电梯、木琴、跷跷板、闸门、分叉、漩涡">示例 2</button>
-        <button data-action="demo3" title="三圈螺旋、弹簧跳台、水车、随机分叉">示例 3</button>
+        <select id="demo-select" title="载入一条预置示例轨道">
+          <option value="" selected>示例…</option>
+          ${DEMOS.map((d, i) => `<option value="${i + 1}" title="${d.hint}">${d.name}</option>`).join('')}
+        </select>
         <button data-action="clear" class="danger">清空</button>
       </div>
       <div class="group">
@@ -109,6 +111,15 @@ export function createPanel(editor: Editor, game: Game): void {
     variantButtons.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.classList.toggle('active', b.dataset.variant === ctx!.id));
   };
 
+  // Demo picker: loading resets the select so picking the same demo twice works.
+  const demoSelect = root.querySelector<HTMLSelectElement>('#demo-select')!;
+  demoSelect.addEventListener('change', () => {
+    const which = Number(demoSelect.value);
+    demoSelect.value = '';
+    if (!which) return;
+    if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo(which);
+  });
+
   const fileInput = root.querySelector<HTMLInputElement>('#import-file')!;
   fileInput.addEventListener('change', async () => {
     const f = fileInput.files?.[0];
@@ -159,15 +170,6 @@ export function createPanel(editor: Editor, game: Game): void {
           break;
         case 'frame':
           game.frameTrack();
-          break;
-        case 'demo':
-          if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo(1);
-          break;
-        case 'demo2':
-          if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo(2);
-          break;
-        case 'demo3':
-          if (game.track.pieces.length === 0 || confirm('用示例轨道替换当前轨道？（可撤销）')) editor.loadDemo(3);
           break;
         case 'clear':
           if (game.track.pieces.length === 0 || confirm('清空整条轨道？（可撤销）')) editor.clear();
