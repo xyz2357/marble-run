@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FIXED_DT, PhysicsWorld } from '../physics/world';
 import { AudioEngine, type MarbleAudioState } from './audio';
-import { spawnMarble, removeMarble, type Marble, type MarbleShape } from './marble';
+import { spawnMarble, removeMarble, getMarbleType, type Marble } from './marble';
 import { Track } from './track';
 import type { MarbleInfo } from '../pieces/types';
 
@@ -40,8 +40,8 @@ export class Game {
   follow = false;
   /** Keep spawning a marble every AUTO_INTERVAL seconds. */
   autoSpawn = false;
-  /** Shape used for newly spawned marbles. */
-  marbleShape: MarbleShape = 'ball';
+  /** MARBLE_TYPES id used for newly spawned marbles. */
+  marbleType = 'glass';
   /** Extra status text appended to the HUD (set by the editor). */
   hudExtra = '';
   /** Called once per frame before rendering (the editor hooks in here). */
@@ -83,8 +83,9 @@ export class Game {
     this.physics = new PhysicsWorld();
     this.hud = document.getElementById('hud');
     try {
+      // 'ball' is what the glass marble was called before there were several kinds.
       const saved = localStorage.getItem('marble-run.shape');
-      if (saved === 'egg' || saved === 'ball') this.marbleShape = saved;
+      if (saved) this.marbleType = getMarbleType(saved === 'ball' ? 'glass' : saved).id;
     } catch {
       /* ignore */
     }
@@ -193,7 +194,7 @@ export class Game {
       this.removeOne(oldest);
     }
     const c = color ?? MARBLE_COLORS[this.colorIndex++ % MARBLE_COLORS.length];
-    const m = spawnMarble(this.physics, this.scene, pos, c, this.simTime, this.marbleShape, heading);
+    const m = spawnMarble(this.physics, this.scene, pos, c, this.simTime, this.marbleType, heading);
     this.marbles.push(m);
     this.onRaceChange?.();
     return m;
@@ -204,10 +205,10 @@ export class Game {
     for (let i = 0; i < n; i++) this.spawnQueue.push(this.simTime + i * interval);
   }
 
-  setMarbleShape(shape: MarbleShape): void {
-    this.marbleShape = shape;
+  setMarbleType(id: string): void {
+    this.marbleType = getMarbleType(id).id;
     try {
-      localStorage.setItem('marble-run.shape', shape);
+      localStorage.setItem('marble-run.shape', this.marbleType);
     } catch {
       /* ignore */
     }

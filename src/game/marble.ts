@@ -5,13 +5,106 @@ import type { PhysicsWorld } from '../physics/world';
 export const MARBLE_RADIUS = 0.15;
 
 export type MarbleShape = 'ball' | 'egg';
-export const MARBLE_SHAPES: { id: MarbleShape; name: string }[] = [
-  { id: 'ball', name: '圆球' },
-  { id: 'egg', name: '鸡蛋' },
+
+export interface MarbleTypeDef {
+  /** Stored in localStorage and used by the test seam; do not rename. */
+  id: string;
+  name: string;
+  /** Which body to build. Only the egg is not a sphere. */
+  shape: MarbleShape;
+  /** Mass per volume. It cancels out of a marble simply rolling downhill, so it shows up where
+   *  marbles push something back: the seesaw, the splitter flap, and each other in a pile-up. */
+  density: number;
+  restitution: number;
+  friction: number;
+  /**
+   * Bounce needs asking for. Track colliders set the Min combine rule, and Rapier resolves a pair
+   * by taking the higher-priority rule (Average < Min < Multiply < Max), so a marble that should
+   * bounce has to request Max. Everything else leaves the track's Min in charge and behaves
+   * exactly as it did before this existed.
+   */
+  bouncy?: boolean;
+  /**
+   * Rolling losses. Density cancels out of a marble simply rolling downhill, so this is what
+   * actually makes a heavy marble feel heavy: less damping means it keeps rolling through flats
+   * and long runs, more means it dies away. Per body, not a world setting.
+   */
+  linearDamping: number;
+  angularDamping: number;
+  /**
+   * Finish. The per-marble race colour is kept in every case, so the race list stays readable;
+   * `lighten` mixes it towards STEEL_TINT. Note metalness cannot go near 1 here: there is no
+   * environment map in this scene, so a fully metallic ball has nothing to reflect and renders
+   * black. Half-metal plus a light tint reads as polished metal under these lights.
+   */
+  look: { roughness: number; metalness: number; clearcoat: number; swirl: boolean; lighten?: number };
+}
+
+/** Selectable marbles, in play-bar order. */
+export const MARBLE_TYPES: MarbleTypeDef[] = [
+  {
+    id: 'glass',
+    name: '玻璃珠',
+    shape: 'ball',
+    density: 2.5,
+    restitution: 0.3,
+    friction: 0.6,
+    linearDamping: 0.05,
+    angularDamping: 0.15,
+    look: { roughness: 0.12, metalness: 0, clearcoat: 1, swirl: true },
+  },
+  {
+    id: 'steel',
+    name: '钢珠',
+    shape: 'ball',
+    // Three times the glass marble's mass: it shoves lighter marbles aside and swings the
+    // seesaw hard. Slick, so it also carries further through curves.
+    density: 7.8,
+    restitution: 0.2,
+    friction: 0.25,
+    // Barely damped: a steel marble carries through flats and long runs.
+    linearDamping: 0.02,
+    angularDamping: 0.04,
+    look: { roughness: 0.12, metalness: 1, clearcoat: 0, swirl: false, lighten: 0.82 },
+  },
+  {
+    id: 'rubber',
+    name: '橡胶珠',
+    shape: 'ball',
+    density: 1.15,
+    restitution: 0.15,
+    friction: 0.95,
+    bouncy: true,
+    // Rubber gives energy back as bounce but eats it in rolling: lively, not fast.
+    linearDamping: 0.09,
+    angularDamping: 0.4,
+    look: { roughness: 0.95, metalness: 0, clearcoat: 0, swirl: false },
+  },
+  {
+    id: 'egg',
+    name: '鸡蛋',
+    shape: 'egg',
+    density: 2.5,
+    restitution: 0.3,
+    friction: 0.6,
+    linearDamping: 0.05,
+    angularDamping: 0.15,
+    look: { roughness: 0.55, metalness: 0, clearcoat: 0.15, swirl: false },
+  },
 ];
+
+const DEFAULT_TYPE = MARBLE_TYPES[0];
+/** What `look.lighten` mixes a marble's race colour towards: a cool, desaturated metal grey. */
+const STEEL_TINT = new THREE.Color(0xb9c0ca);
+
+export function getMarbleType(id: string): MarbleTypeDef {
+  return MARBLE_TYPES.find((t) => t.id === id) ?? DEFAULT_TYPE;
+}
 
 export interface Marble {
   id: number;
+  /** Which MARBLE_TYPES entry this was spawned as. */
+  type: string;
   shape: MarbleShape;
   body: RAPIER.RigidBody;
   collider: RAPIER.Collider;
@@ -32,6 +125,42 @@ export interface Marble {
 let nextId = 1;
 const sphereGeo = new THREE.SphereGeometry(MARBLE_RADIUS, 40, 28);
 const textureCache = new Map<number, THREE.CanvasTexture>();
+
+/**
+ * A metal has no diffuse colour: it only shows what it reflects, so a metallic marble with
+ * nothing around it renders black. This 64x32 sky-to-ground gradient is all it needs.
+ *
+ * It hangs off the metal material only, NOT scene.environment: an environment on the scene makes
+ * every material sample it every frame, which cost 60% of the render budget under software GL
+ * (and PMREM-filtering a RoomEnvironment instead cost seconds per page load). Built lazily so a
+ * run without a metal marble never pays for it.
+ */
+let envTex: THREE.Texture | null = null;
+function metalEnvironment(): THREE.Texture {
+  if (envTex) return envTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 32;
+  const ctx = canvas.getContext('2d')!;
+  // High contrast on purpose: a smooth wash reflects as a smooth wash and the ball reads as
+  // pearl, not metal. A bright sky, a hard horizon and a dark floor give it something to show.
+  const g = ctx.createLinearGradient(0, 0, 0, 32);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.42, '#e8f2ff');
+  g.addColorStop(0.5, '#7f8a95');
+  g.addColorStop(0.52, '#3a4048');
+  g.addColorStop(1, '#20242a');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 32);
+  // A couple of bright patches so the reflection has features to slide across as it rolls.
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(6, 3, 16, 7);
+  ctx.fillRect(40, 6, 10, 5);
+  envTex = new THREE.CanvasTexture(canvas);
+  envTex.mapping = THREE.EquirectangularReflectionMapping;
+  envTex.colorSpace = THREE.SRGBColorSpace;
+  return envTex;
+}
 
 /**
  * Egg: two half-spheroids sharing the same waist. Slightly narrower than the
@@ -120,9 +249,11 @@ export function spawnMarble(
   pos: THREE.Vector3Like,
   color: number,
   simTime: number,
-  shape: MarbleShape = 'ball',
+  typeId: string = DEFAULT_TYPE.id,
   heading?: THREE.Vector3,
 ): Marble {
+  const type = getMarbleType(typeId);
+  const shape = type.shape;
   // An egg starts lying on its side with its long axis across the track (so it rolls like a log
   // rather than tumbling end over end), with a little random yaw so runs differ.
   let rot: THREE.Quaternion;
@@ -143,24 +274,30 @@ export function spawnMarble(
     .setCcdEnabled(true)
     // Marbles must never sleep: a gate or lift moving away from a resting marble would not wake it.
     .setCanSleep(false)
-    .setLinearDamping(0.05)
-    .setAngularDamping(0.15);
+    .setLinearDamping(type.linearDamping)
+    .setAngularDamping(type.angularDamping);
   const body = pw.world.createRigidBody(rbDesc);
   const colDesc = (shape === 'egg' ? RAPIER.ColliderDesc.convexHull(eggHullPoints)! : RAPIER.ColliderDesc.ball(MARBLE_RADIUS))
-    .setRestitution(0.3)
-    .setFriction(0.6)
-    .setDensity(2.5);
+    .setRestitution(type.restitution)
+    .setFriction(type.friction)
+    .setDensity(type.density);
+  // See MarbleTypeDef.bouncy: only a marble that asks for Max overrides the track's Min.
+  if (type.bouncy) colDesc.setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Max);
   const collider = pw.world.createCollider(colDesc, body);
 
-  // Glass ball with a colour swirl; eggs get the photo skin and a matte eggshell finish.
+  // Eggs get the photo skin; every ball keeps its race colour and differs only in finish, so the
+  // metal one reads as anodised steel and the rubber one as matte rubber.
   const mat =
     shape === 'egg'
-      ? new THREE.MeshPhysicalMaterial({ map: eggTexture, roughness: 0.55, metalness: 0, clearcoat: 0.15, clearcoatRoughness: 0.5 })
+      ? new THREE.MeshPhysicalMaterial({ map: eggTexture, roughness: type.look.roughness, metalness: 0, clearcoat: type.look.clearcoat, clearcoatRoughness: 0.5 })
       : new THREE.MeshPhysicalMaterial({
-          map: swirlTexture(color),
-          roughness: 0.12,
-          metalness: 0.0,
-          clearcoat: 1,
+          envMap: type.look.metalness > 0.2 ? metalEnvironment() : null,
+          envMapIntensity: 1.6,
+          map: type.look.swirl ? swirlTexture(color) : undefined,
+          color: type.look.swirl ? 0xffffff : new THREE.Color(color).lerp(STEEL_TINT, type.look.lighten ?? 0),
+          roughness: type.look.roughness,
+          metalness: type.look.metalness,
+          clearcoat: type.look.clearcoat,
           clearcoatRoughness: 0.08,
         });
   const mesh = new THREE.Mesh(shape === 'egg' ? eggGeo : sphereGeo, mat);
@@ -172,6 +309,7 @@ export function spawnMarble(
 
   return {
     id: nextId++,
+    type: type.id,
     shape,
     body,
     collider,

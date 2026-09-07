@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { AudioEngine } from './game/audio';
+import { MARBLE_TYPES } from './game/marble';
 import type { Editor, Mode, ToolMode } from './editor/editor';
 import type { Game } from './game/game';
 import type { PlacedPiece } from './pieces/types';
@@ -25,7 +26,7 @@ export function installTestSeam(game: Game, editor: Editor): void {
       game.marbles.map((m) => {
         const t = m.body.translation();
         const v = m.body.linvel();
-        return { id: m.id, shape: m.shape, x: t.x, y: t.y, z: t.z, vx: v.x, vy: v.y, vz: v.z };
+        return { id: m.id, type: m.type, shape: m.shape, x: t.x, y: t.y, z: t.z, vx: v.x, vy: v.y, vz: v.z };
       }),
     finished: () => [...game.finished],
     /** Contact normals / points for one marble (debugging geometry). */
@@ -51,8 +52,10 @@ export function installTestSeam(game: Game, editor: Editor): void {
     results: () => game.results.map((r) => ({ ...r })),
     simTime: () => game.simTime,
     spawnBurst: (n: number, interval?: number) => game.spawnBurst(n, interval),
-    setShape: (shape: 'ball' | 'egg') => game.setMarbleShape(shape),
-    shape: () => game.marbleShape,
+    /** Kept as `shape` for the older tests; 'ball' still means the glass marble. */
+    setShape: (id: string) => game.setMarbleType(id === 'ball' ? 'glass' : id),
+    shape: () => game.marbleType,
+    marbleTypes: () => MARBLE_TYPES.map((t) => ({ id: t.id, name: t.name, density: t.density, restitution: t.restitution, friction: t.friction })),
     setAutoSpawn: (on: boolean) => game.setAutoSpawn(on),
     setTimeScale: (s: number) => game.setTimeScale(s),
     timeScale: () => game.timeScale,
