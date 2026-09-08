@@ -48,7 +48,11 @@ const SEAM = THREE.MathUtils.degToRad(2.5);
 const INLET = THREE.MathUtils.degToRad(70);
 /** Fraction of the bore's length taken up by the inlet window. A narrow one (46 degrees over the
  *  first 17%) was not forgiving enough: a marble that had queued behind another arrived a little
- *  differently, missed the window and fell past the tube. */
+ *  differently, missed the window and fell past the tube. Narrowing it back to 55 is not the answer
+ *  either - it costs 2 in 18 on the slow feed the tests use, where 70 is 18 for 18. The width has
+ *  to stay. It does let the blade sling the odd marble back out sideways at the bottom, about 1 in
+ *  15 off a fast feed; a shell around the tube stopped that but looked like exactly what it was, a
+ *  sleeve bolted over the outside, so it is not there. */
 const INLET_END = 0.34;
 /**
  * Near the top the seam swings round to the UNDERSIDE and opens out, so the marble simply drops
@@ -58,8 +62,8 @@ const INLET_END = 0.34;
  * it instead.
  */
 const OUTLET = THREE.MathUtils.degToRad(52);
-const OUTLET_FROM = 0.78;
-const OUTLET_OPEN = 0.93;
+const OUTLET_FROM = 0.82;
+const OUTLET_OPEN = 0.95;
 const RING = 20;
 
 /**
@@ -69,6 +73,17 @@ const RING = 20;
  * twenty metres sideways. They have to end together.
  */
 const OVERRUN = 0.3;
+/**
+ * How far BELOW A0 the blade starts. The bore is capped 0.16 back from A0, and with the helix
+ * starting exactly at A0 that left a dead space at the bottom of the tube with no blade in it. A
+ * marble that rolled down into it - which is what a fast approach does, it lands and runs to the
+ * bottom rather than dropping into a pocket - sat against the wall at axial 0.01 with no blade
+ * face underneath to lift it. Every turn the flight above swept past and pushed it round instead
+ * of up, and it orbited there for good: locked at radius 0.43, one lap per PERIOD, forever. The
+ * helix now runs down past the mouth so the whole bore is inside a pocket. Stops 25 mm short of
+ * the cap, far too little for a marble to get into.
+ */
+const UNDERRUN = 0.1;
 const AXIS = A1.clone().sub(A0);
 const LENGTH = AXIS.length();
 const DIR = AXIS.clone().normalize();
@@ -78,6 +93,16 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 
 const IN_PORT = v3(-2.5, 1, 0);
 const OUT_PORT = v3(3.5, 2.5, 0);
+
+/**
+ * Where the catch deck starts: the first point at the out port's height that is clear of the tube,
+ * i.e. where the tube's underside crosses it. The deck used to begin 0.35 back and 0.5 below A1,
+ * which is 0.16 from the axis - a plank run through the middle of a glass tube. It was load-bearing
+ * there, because the bore's underside opens well before the mouth, so the outlet had to move back
+ * to suit (see OUTLET_FROM) rather than the deck reaching in to catch marbles early.
+ */
+const UNDER_AXIAL = (OUT_PORT.y - A0.y + (BORE + WALL) * DIR.x) / DIR.y;
+const EXIT_START = v3(A0.x + UNDER_AXIAL * DIR.x + (BORE + WALL) * DIR.y, OUT_PORT.y, 0);
 
 /** Bore cross-section: an annulus split by a seam at the top, outer ring CCW then inner ring CW,
  *  so the outside faces out and the bore faces the marble. */
@@ -112,10 +137,10 @@ function bladeStations(): Station[] {
   const ref = Math.abs(DIR.y) > 0.9 ? v3(1, 0, 0) : v3(0, 1, 0);
   const u = new THREE.Vector3().crossVectors(ref, DIR).normalize();
   const w = new THREE.Vector3().crossVectors(DIR, u).normalize();
-  const total = LENGTH + OVERRUN;
+  const total = UNDERRUN + LENGTH + OVERRUN;
   const steps = Math.round((total / PITCH) * 24);
   for (let i = 0; i <= steps; i++) {
-    const t = (i / steps) * (total / LENGTH);
+    const t = (-UNDERRUN + (i / steps) * total) / LENGTH;
     const ang = t * TURNS * Math.PI * 2;
     const radial = u.clone().multiplyScalar(Math.cos(ang)).addScaledVector(w, Math.sin(ang));
     const pos = A0.clone().addScaledVector(DIR, t * LENGTH).addScaledVector(radial, SHAFT);
@@ -141,10 +166,15 @@ function bladeGeometry(): THREE.BufferGeometry {
   return sweepStations(bladeStations(), BLADE_PROFILE);
 }
 
+/** Centre of the shaft, measured along the axis from A0: it spans the blade, underrun to overrun. */
+const SHAFT_LENGTH = UNDERRUN + LENGTH + OVERRUN;
+const SHAFT_MID = (OVERRUN - UNDERRUN) / 2 + LENGTH / 2;
+
 function shaftGeometry(): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(SHAFT, SHAFT, LENGTH, 16);
+  const g = new THREE.CylinderGeometry(SHAFT, SHAFT, SHAFT_LENGTH, 16);
   g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), DIR));
-  g.translate(A0.x + AXIS.x / 2, A0.y + AXIS.y / 2, A0.z + AXIS.z / 2);
+  const at = A0.clone().addScaledVector(DIR, SHAFT_MID);
+  g.translate(at.x, at.y, at.z);
   return g;
 }
 
@@ -164,7 +194,7 @@ export const screwDef: PieceDef = {
     // the tube's wall, and the marble stopped dead against it.
     // Runs to just short of the inlet window and drops the marble in through the top of the bore.
     const feed = sweep(slopePath(IN_PORT, v3(A0.x - 0.35, A0.y + 0.5, 0)), 14);
-    const exit = sweep(slopePath(v3(A1.x - 0.35, A1.y - 0.5, 0), OUT_PORT), 18);
+    const exit = sweep(slopePath(EXIT_START, OUT_PORT), 16);
     const bore = sweep(linePath(A0.clone().addScaledVector(DIR, -0.15), A1.clone().addScaledVector(DIR, OVERRUN)), 96, boreProfile);
     // Cap over the lower mouth, which otherwise faces down and lets everything fall out again.
     const capQ = new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), DIR);
@@ -211,10 +241,10 @@ function makeScrew(ctx: MechanismContext): Mechanism {
     d.setFriction(0.02).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min).setRestitution(0).setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Min);
   const tri = trimeshArrays(blade);
   ctx.world.createCollider(grip(RAPIER.ColliderDesc.trimesh(tri.vertices, tri.indices, RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES)), body);
-  const mid = DIR.clone().multiplyScalar(LENGTH / 2);
+  const mid = DIR.clone().multiplyScalar(SHAFT_MID);
   ctx.world.createCollider(
     grip(
-      RAPIER.ColliderDesc.cylinder(LENGTH / 2, SHAFT)
+      RAPIER.ColliderDesc.cylinder(SHAFT_LENGTH / 2, SHAFT)
         .setTranslation(mid.x, mid.y, mid.z)
         .setRotation(new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), DIR)),
     ),

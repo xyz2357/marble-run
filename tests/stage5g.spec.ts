@@ -155,6 +155,39 @@ for (const type of ['glass', 'steel', 'rubber']) {
   });
 }
 
+/** Five steep slopes ahead of the screw: the marble reaches the feed deck at about 3.5 m/s. */
+const FAST_SCREW_RIG: Placed[] = [
+  { def: 'start', cell: { x: -5, z: 0 }, level: 7, rot: 0 },
+  ...[0, 1, 2, 3, 4].map((i) => ({ def: 'slope_steep', cell: { x: -4 + i, z: 0 }, level: 6 - i, rot: 0 })),
+  { def: 'straight', cell: { x: 1, z: 0 }, level: 2, rot: 0 },
+  { def: 'screw', cell: { x: 4, z: 0 }, level: 0, rot: 0 },
+  { def: 'end', cell: { x: 8, z: 0 }, level: 5, rot: 0 },
+];
+
+test('a marble that runs to the bottom of the screw is still lifted out', async ({ page }) => {
+  // A marble arriving fast does not drop into a pocket - it lands and runs on down to the bottom of
+  // the bore. The blade used to start exactly at the axis while the tube is capped 0.16 further
+  // back, so the bottom was a dead space with no blade in it: the marble sat against the wall and
+  // every turn the flight above swept it round instead of up. It orbited there for good, one lap
+  // per two seconds, which is what "it stays at the bottom" looks like. Off a five-slope run-up
+  // that lost a third of all marbles. The blade now runs down past the mouth.
+  const errors = await loadTrack(page, FAST_SCREW_RIG);
+  await page.evaluate(() => window.__TEST__.spawnBurst(3, 3));
+  // Three at three seconds are all out inside 40 s when it works; the budget is for the odd one
+  // the blade throws back out of the inlet, which never arrives however long you wait.
+  const { done, peakY } = await run(page, 3, 55);
+  const ms = await page.evaluate(() => window.__TEST__.marbles());
+  // The bore's lower mouth is at about (2.7, 1.3); anything still down there never got picked up.
+  const atFoot = ms.filter((m) => m.y < 1.7 && m.x > 2 && m.x < 4 && Math.abs(m.z) < 1);
+  console.log(`fast screw: ${done}/3, peak y ${peakY.toFixed(2)}, at the foot: ${atFoot.length}`);
+  expect(atFoot, 'nothing left circling at the bottom of the bore').toHaveLength(0);
+  // One in thirty or so is still slung back out of the inlet window by the blade, so this asks for
+  // most of them rather than all: what it is really guarding is the line above.
+  expect(done, 'the fast feed still gets carried up').toBeGreaterThanOrEqual(2);
+  expect(peakY, 'they were lifted, not just dropped').toBeGreaterThan(2.6);
+  expect(errors).toEqual([]);
+});
+
 test('the loop is its own palette entry and the big wheel joins the wheel family', async ({ page }) => {
   await loadTrack(page, LOOP_RIG);
   const palette = await page.evaluate(() => window.__TEST__.paletteIds());

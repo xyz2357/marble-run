@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "pieces": [
+    {
+      "def": "start",
+      "cell": {
+        "x": -9,
+        "z": 0
+      },
+      "level": 16,
+      "rot": 0
+    },
+    {
+      "def": "loop",
+      "cell": {
+        "x": -8,
+        "z": 0
+      },
+      "level": 11,
+      "rot": 0
+    },
+    {
+      "def": "slope",
+      "cell": {
+        "x": -3,
+        "z": 1
+      },
+      "level": 10,
+      "rot": 0
+    },
+    {
+      "def": "slope",
+      "cell": {
+        "x": 3,
+        "z": 1
+      },
+      "level": 1,
+      "rot": 0
+    },
+    {
+      "def": "end",
+      "cell": {
+        "x": 5,
+        "z": 1
+      },
+      "level": 1,
+      "rot": 0
+    },
+    {
+      "def": "screw",
+      "cell": {
+        "x": 1,
+        "z": 1
+      },
+      "level": 8,
+      "rot": 0
+    }
+  ]
+}
