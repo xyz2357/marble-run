@@ -115,10 +115,35 @@ test('the big wheel takes marbles down eight levels', async ({ page }) => {
   await page.screenshot({ path: 'test-results/stage5g-bigwheel.png' });
 });
 
+test('the screw carries marbles up, one after another', async ({ page }) => {
+  // The only piece that gains height without a lift car. In port local (-2.5, 1.0), out at
+  // (3.5, 2.5): three levels up, and it takes about twenty seconds per marble to do it.
+  const errors = await loadTrack(page, [
+    { def: 'start', cell: { x: 0, z: 0 }, level: 3, rot: 0 },
+    { def: 'slope_steep', cell: { x: 1, z: 0 }, level: 2, rot: 0 },
+    { def: 'screw', cell: { x: 4, z: 0 }, level: 0, rot: 0 },
+    { def: 'end', cell: { x: 8, z: 0 }, level: 5, rot: 0 },
+  ]);
+  await page.evaluate(() => window.__TEST__.spawnBurst(4, 3));
+  const { done, peakY, maxSpeed } = await run(page, 4, 120);
+  const times = (await page.evaluate(() => window.__TEST__.results())).map((r) => r.time);
+  console.log(`screw: ${done}/4 in ${times.map((t) => t.toFixed(0)).join(', ')}s, peak y ${peakY.toFixed(2)}, max speed ${maxSpeed.toFixed(2)}`);
+  expect(done, 'all four were carried up').toBe(4);
+  // The entry deck is at y = 1.0; anything above 2.6 was lifted there by the screw.
+  expect(peakY, 'marbles ended up well above where they went in').toBeGreaterThan(2.6);
+  // Carried, not thrown: the blade's rim moves at about 1.4 m/s.
+  expect(maxSpeed, 'nothing is flung').toBeLessThan(4);
+  expect(Math.min(...times), 'a slow climb, not a drop').toBeGreaterThan(8);
+  expect(errors).toEqual([]);
+  await page.evaluate(() => window.__TEST__.lookAt(4.5, 1.6, 0, 6));
+  await page.screenshot({ path: 'test-results/stage5g-screw.png' });
+});
+
 test('the loop is its own palette entry and the big wheel joins the wheel family', async ({ page }) => {
   await loadTrack(page, LOOP_RIG);
   const palette = await page.evaluate(() => window.__TEST__.paletteIds());
   expect(palette).toContain('loop');
+  expect(palette).toContain('screw');
   expect(palette, 'the big wheel folds into the wheel entry').not.toContain('wheel_big');
   await page.evaluate(() => {
     window.__TEST__.setMode('edit');

@@ -52,7 +52,7 @@ test('palette + toolbar render, demo track loads in edit mode', async ({ page })
   await page.waitForFunction(() => window.__TEST__?.ready === true, null, { timeout: 30_000 });
   expect(await page.evaluate(() => window.__TEST__.mode())).toBe('edit');
   expect(await page.evaluate(() => window.__TEST__.pieces().length)).toBe(15);
-  await expect(page.locator('#palette .piece')).toHaveCount(24);
+  await expect(page.locator('#palette .piece')).toHaveCount(25);
   await expect(page.locator('#toolbar [data-action="mode-edit"]')).toHaveClass(/active/);
   await page.screenshot({ path: 'test-results/stage2-ui.png' });
 });

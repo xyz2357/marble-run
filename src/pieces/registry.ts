@@ -15,6 +15,7 @@ import { jumpDef } from './jump';
 import { helixDef } from './helix';
 import { liftDef } from './lift';
 import { loopDef } from './loop';
+import { screwDef } from './screw';
 import { seesawDef } from './seesaw';
 import { sCurveLeftDef, sCurveRightDef } from './scurve';
 import { mergeDef, splitterDef, splitterRandomDef } from './splitter';
@@ -58,6 +59,7 @@ const defs: PieceDef[] = [
   liftDef(10),
   liftDef(10, true),
   loopDef,
+  screwDef,
   gateDef(1.5),
   gateDef(3),
   gateDef(5),
