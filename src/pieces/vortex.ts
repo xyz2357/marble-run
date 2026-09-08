@@ -1,5 +1,16 @@
 import * as THREE from 'three';
-import { arcPath, boxGeo, latheUV, mergeGeometries, slopePath, sweep } from '../geometry/sweep';
+import {
+  RAIL_HEIGHT,
+  TRACK_PROFILE,
+  arcPath,
+  boxGeo,
+  latheUV,
+  lerpProfile,
+  mergeGeometries,
+  slopePath,
+  sweep,
+  troughY,
+} from '../geometry/sweep';
 import { H, v3, type PieceDef } from './types';
 
 /**
@@ -72,9 +83,9 @@ export const vortexDef: PieceDef = {
     latheUV(bowl, pts);
     bowl.computeVertexNormals();
 
-    /** Bowl surface height at radius r (0 outside the rim, where the entry deck is). */
+    /** Bowl surface height at radius r, held level at the rim height outside the bowl. */
     const surfaceY = (r: number): number => {
-      if (r >= rimR) return 0;
+      if (r >= rimR) return rimY;
       if (r >= coneStartR) return rimY - filletR * (1 - Math.cos(Math.asin((rimR - r) / filletR)));
       return rimY + coneStartY - coneSlope * (coneStartR - r);
     };
@@ -91,15 +102,39 @@ export const vortexDef: PieceDef = {
     const theta = Math.atan2(2.5, LEAD_R);
     const leadPt = (th: number) => v3(-2.5 + LEAD_R * Math.sin(th), 0, LEAD_R * (1 - Math.cos(th)));
     const leadR = (t: number) => { const p = leadPt(theta * t); return Math.hypot(p.x, p.z); };
-    // Once over the rim the deck follows the bowl down, holding the same -rimY clearance it has at
-    // the edge, so it never buries itself in the fillet and the hand-over stays a small step.
-    const leadY = (t: number) => surfaceY(leadR(t)) - rimY;
+    const endR = Math.hypot(2.5, LEAD_R) - LEAD_R;
+    // 0 until the deck is most of the way in, 1 where it lets go. Flat at both ends. The last part
+    // of the run only: a marble already orbiting meets the entry groove out near the rim, and if the
+    // rail is down that far out it climbs into the groove and escapes back up the way it came in -
+    // that costs one marble in three off an eight-slope run-up.
+    const TAPER_FROM = 0.6;
+    const tip = (r: number) => {
+      const span = (rimR - endR) * (1 - TAPER_FROM);
+      const u = Math.min(1, Math.max(0, (rimR - (rimR - endR) * TAPER_FROM - r) / span));
+      return u * u * (3 - 2 * u);
+    };
+    // Once over the rim the deck follows the bowl down, starting with the clearance it already has
+    // at the edge (-rimY, the step the rim sits below the entry) and closing most of it by the end,
+    // so the marble is handed to the bowl over a 15 mm lip instead of dropped off a ledge.
+    const CLEAR_RIM = -rimY;
+    const CLEAR_END = 0.015;
+    const leadY = (t: number) => {
+      const r = leadR(t);
+      return surfaceY(r) - rimY + (CLEAR_END - CLEAR_RIM) * tip(r);
+    };
+    // The rail on the bowl side flattens to a low kerb as the deck comes inside, so the entry reads
+    // as a groove cut through the rim rather than a wall standing in the bowl - and an orbiting
+    // marble that comes back round to it rides over the kerb instead of slamming into a rail.
+    const KERB = troughY(0.3) + 0.03;
+    const leadEnd: typeof TRACK_PROFILE = TRACK_PROFILE.map(([s, u]) =>
+      s < 0 && u === RAIL_HEIGHT ? [s, KERB] : [s, u],
+    );
     const leadIn = sweep(arcPath(v3(-2.5, 0, LEAD_R), LEAD_R, 0, theta, 1, (t) => {
       const h = 1e-3;
       const t0 = Math.max(0, t - h);
       const t1 = Math.min(1, t + h);
       return { y: leadY(t), dy: (leadY(t1) - leadY(t0)) / (t1 - t0) };
-    }), 24);
+    }), 28, (t) => lerpProfile(TRACK_PROFILE, leadEnd, tip(leadR(t))));
 
     // Rim lip with a gap where the lead-in crosses. Lathe angle phi -> (r sin phi, y, r cos phi).
     const release = leadPt(theta);
