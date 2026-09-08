@@ -10,20 +10,11 @@ import { v3, type BuiltPiece, type Mechanism, type MechanismContext, type PieceD
  * the blade's upper face and the low side of the tube; turning the blade walks that pocket along
  * the axis. Stand the same screw up vertically and there is no low side, so nothing is carried.
  *
- * NOT FINISHED - not in the registry. It builds and looks right, the marble is retained, but it
- * does not climb: it ends up wedged in the first pocket, orbiting with the blade at about 1 m/s
- * while its position never changes. Things already ruled out:
- *   - rotation direction: both ways behave the same
- *   - grip: friction 0.45 and 0.02 (with the Min combine rule) behave the same
- *   - falling out of the bottom mouth: fixed, by capping it and feeding through a top inlet
- *     window instead. A tilted tube's lower mouth faces downwards, so a marble fed in at the end
- *     just drops straight back out.
- * The likely cause is the channel being too tight for a rigid ball: the bore minus the shaft is
- * 0.36 and the marble is 0.30, so instead of resting at the low side of the tube and being pushed
- * along by the blade's face, it gets held between blade, shaft and wall and spun. Water cannot be
- * carried round like that, which is why a real screw does not have this problem. Next thing to
- * try is a much wider bore with a thin or absent shaft, so the marble sits in a trough at the
- * bottom with room to spare.
+ * NOT for eggs. An egg is 0.42 long against a 0.53 channel and a 0.55 pitch, so it tumbles in
+ * the pocket rather than sitting in it, and it never gets out of the bottom: probed at several
+ * feed speeds, none of three eggs was carried up. Every ball - glass, steel and rubber - goes up
+ * 3 for 3 at both a slow and a fast approach, and a single marble makes it from all eight points
+ * of the screw's rotation, so arriving at the wrong moment is not a problem.
  */
 
 /** Axis, bottom to top. 40 degrees: shallow enough that the pocket holds a marble. */
@@ -54,11 +45,11 @@ const PERIOD = 2;
  * first pocket of the blade.
  */
 const SEAM = THREE.MathUtils.degToRad(2.5);
-const INLET = THREE.MathUtils.degToRad(64);
+const INLET = THREE.MathUtils.degToRad(70);
 /** Fraction of the bore's length taken up by the inlet window. A narrow one (46 degrees over the
  *  first 17%) was not forgiving enough: a marble that had queued behind another arrived a little
  *  differently, missed the window and fell past the tube. */
-const INLET_END = 0.27;
+const INLET_END = 0.34;
 /**
  * Near the top the seam swings round to the UNDERSIDE and opens out, so the marble simply drops
  * through onto the catch deck. Letting it run out of the end does not work: it leaves the mouth

@@ -94,6 +94,7 @@ export function createPanel(editor: Editor, game: Game): void {
           </dl>
           <h4>弹珠</h4>
           <p>底部下拉可换：玻璃珠是标准，钢珠更沉更快，橡胶珠抓地、落地会弹，发光珠会亮，还有鸡蛋。</p>
+          <p>鸡蛋不是圆的，会在螺旋提升机里翻滚卡住——那个零件只适合圆珠。</p>
         </section>
       </div>
     </div>
