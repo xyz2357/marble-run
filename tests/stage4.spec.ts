@@ -157,6 +157,31 @@ test('vortex: marble orbits at least one full lap before dropping through, then 
   await page.screenshot({ path: 'test-results/stage4-vortex.png' });
 });
 
+test('the vortex takes marbles that arrive with no run-up at all', async ({ page }) => {
+  // The lead-in has to reach INSIDE the rim before it lets go. An arc from the port only gets as
+  // close to the axis as hypot(2.5, radius) - radius, and at radius 1 that was 1.69 against a rim
+  // of 1.7: the marble was handed over already on the edge, drifted out through the lip's gap where
+  // there is no bowl under it, and fell down the outside. Fed off two slopes it had enough speed to
+  // scrape through anyway, which is why the test above never saw it. Straight off the start, with a
+  // level piece in front of the bowl and nothing else, it did not.
+  await loadTrack(page, [
+    { def: 'start', cell: { x: 1, z: 0 }, level: 7, rot: 0 },
+    { def: 'straight', cell: { x: 2, z: 0 }, level: 7, rot: 0 },
+    { def: 'vortex', cell: { x: 5, z: 0 }, level: 7, rot: 0 },
+    { def: 'end', cell: { x: 8, z: 0 }, level: 3, rot: 0 },
+  ]);
+  await page.evaluate(() => {
+    window.__TEST__.clearMarbles();
+    window.__TEST__.spawnBurst(3, 1.5);
+  });
+  const ok = await runUntilFinished(page, 3, 45);
+  const left = await page.evaluate(() => window.__TEST__.marbles().map((m) => [m.x, m.y, m.z].map((n) => n.toFixed(2)).join(',')));
+  console.log(`vortex slow entry: ${ok ? 'all three out' : 'INCOMPLETE'} left=${left.join(' | ')}`);
+  expect(ok, 'all three found their way into the bowl').toBe(true);
+  // A marble that misses the bowl drops down the outside and ends up lying on the ground.
+  expect(await page.evaluate(() => window.__TEST__.marbles().filter((m) => m.y < 0.5).length), 'none fell out past the rim').toBe(0);
+});
+
 test('seesaw tips under the marble and delivers it to the exit', async ({ page }) => {
   await loadTrack(page, [
     { def: 'start', cell: { x: 0, z: 0 }, level: 3, rot: 0 },

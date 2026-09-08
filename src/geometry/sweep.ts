@@ -256,9 +256,39 @@ export function mergeGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeome
   return geo;
 }
 
+/**
+ * Rescale a geometry's 0..1 UVs into metres, so a texture tiled once per metre reads at the same
+ * size on it as on a swept track. Three's own primitives (box, lathe) map each face or one whole
+ * revolution to 0..1, which with a metre-scale wood grain smears one tile across the entire
+ * surface - the vortex bowl came out as a set of concentric rings.
+ */
+export function metreUV(geo: THREE.BufferGeometry, uMetres: number, vMetres: number): THREE.BufferGeometry {
+  const uv = geo.getAttribute('uv');
+  if (!uv) return geo;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * uMetres, uv.getY(i) * vMetres);
+  uv.needsUpdate = true;
+  return geo;
+}
+
+/**
+ * Metre-scale UVs for a revolved profile: u around the circumference (at the widest radius, so the
+ * grain runs a touch tighter further in, the way a turned bowl actually looks), v along the profile.
+ */
+export function latheUV(geo: THREE.BufferGeometry, pts: THREE.Vector2[], phiLength = Math.PI * 2): THREE.BufferGeometry {
+  let maxR = 0;
+  let len = 0;
+  for (let i = 0; i < pts.length; i++) {
+    maxR = Math.max(maxR, pts[i].x);
+    if (i > 0) len += pts[i].distanceTo(pts[i - 1]);
+  }
+  return metreUV(geo, maxR * phiLength, len);
+}
+
 /** Axis-aligned box as indexed geometry (for walls, floors). */
 export function boxGeo(center: THREE.Vector3, half: THREE.Vector3): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(half.x * 2, half.y * 2, half.z * 2);
+  const dims = [half.x * 2, half.y * 2, half.z * 2].sort((a, b) => b - a);
+  metreUV(g, dims[0], dims[1]);
   g.translate(center.x, center.y, center.z);
   return g;
 }

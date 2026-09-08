@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { arcPath, boxGeo, mergeGeometries, slopePath, sweep } from '../geometry/sweep';
+import { arcPath, boxGeo, latheUV, mergeGeometries, slopePath, sweep } from '../geometry/sweep';
 import { H, v3, type PieceDef } from './types';
 
 /**
@@ -69,18 +69,40 @@ export const vortexDef: PieceDef = {
     // face into the bowl (see funnel.ts for the opposite case), so no reversal here.
     for (const pt of pts) pt.y += rimY;
     const bowl = new THREE.LatheGeometry(pts, 72);
+    latheUV(bowl, pts);
     bowl.computeVertexNormals();
 
-    // Lead-in: arc of radius 1 from the -X edge, turning towards +Z, ending on the rim
-    // at ~60 degrees where the heading is within 13 degrees of tangential.
-    const theta = THREE.MathUtils.degToRad(60);
-    const ease = (t: number) => t * t * (3 - 2 * t);
-    const dease = (t: number) => 6 * t * (1 - t);
-    const drop = 0; // lead-in stays level; the bowl rim is rimY below it
-    const leadIn = sweep(arcPath(v3(-2.5, 0, 1), 1, 0, theta, 1, (t) => ({ y: drop * ease(t), dy: drop * dease(t) })), 16);
+    /** Bowl surface height at radius r (0 outside the rim, where the entry deck is). */
+    const surfaceY = (r: number): number => {
+      if (r >= rimR) return 0;
+      if (r >= coneStartR) return rimY - filletR * (1 - Math.cos(Math.asin((rimR - r) / filletR)));
+      return rimY + coneStartY - coneSlope * (coneStartR - r);
+    };
+
+    // Lead-in: an arc from the -X edge, turning towards +Z, that reaches INSIDE the rim before it
+    // lets go. An arc starting at the port with radius LEAD_R gets no closer to the axis than
+    // hypot(2.5, LEAD_R) - LEAD_R, so the old radius of 1 bottomed out at 1.69 - outside the 1.7 rim.
+    // The marble was handed over already past the edge, drifted further out through the lip's gap
+    // (where there is no bowl under it at all) and dropped down the outside. At 1.5 the arc reaches
+    // 1.42, and a marble rides the outer wall of a curve - here the inner side - so it leaves about
+    // 0.09 further in again, a clear 0.2 inside the lip's inner face.
+    const LEAD_R = 1.5;
+    // End at the arc's closest approach, where the heading is exactly tangential to the bowl.
+    const theta = Math.atan2(2.5, LEAD_R);
+    const leadPt = (th: number) => v3(-2.5 + LEAD_R * Math.sin(th), 0, LEAD_R * (1 - Math.cos(th)));
+    const leadR = (t: number) => { const p = leadPt(theta * t); return Math.hypot(p.x, p.z); };
+    // Once over the rim the deck follows the bowl down, holding the same -rimY clearance it has at
+    // the edge, so it never buries itself in the fillet and the hand-over stays a small step.
+    const leadY = (t: number) => surfaceY(leadR(t)) - rimY;
+    const leadIn = sweep(arcPath(v3(-2.5, 0, LEAD_R), LEAD_R, 0, theta, 1, (t) => {
+      const h = 1e-3;
+      const t0 = Math.max(0, t - h);
+      const t1 = Math.min(1, t + h);
+      return { y: leadY(t), dy: (leadY(t1) - leadY(t0)) / (t1 - t0) };
+    }), 24);
 
     // Rim lip with a gap where the lead-in crosses. Lathe angle phi -> (r sin phi, y, r cos phi).
-    const release = v3(-2.5 + Math.sin(theta), 0, 1 - Math.cos(theta));
+    const release = leadPt(theta);
     const phiEntry = Math.atan2(-2.5, 0); // -pi/2
     const phiRelease = Math.atan2(release.x, release.z);
     const halfW = 0.37 / rimR; // gap exactly as wide as the lead-in track (its rails block the rest)
@@ -94,7 +116,9 @@ export const vortexDef: PieceDef = {
       new THREE.Vector2(rimR - lipW, rimY - 0.02),
     ];
     lipPts.reverse();
-    const lip = new THREE.LatheGeometry(lipPts, 72, gapEnd, Math.PI * 2 - (gapEnd - gapStart));
+    const lipArc = Math.PI * 2 - (gapEnd - gapStart);
+    const lip = new THREE.LatheGeometry(lipPts, 72, gapEnd, lipArc);
+    latheUV(lip, lipPts, lipArc);
     lip.computeVertexNormals();
 
     // Exit chute: back wall behind the tube, slopes down to the +X edge.

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { boxGeo, mergeGeometries, slopePath, sweep } from '../geometry/sweep';
+import { boxGeo, latheUV, mergeGeometries, slopePath, sweep } from '../geometry/sweep';
 import { H, v3, type PieceDef } from './types';
 
 /**
@@ -68,6 +68,7 @@ export const funnelDef: PieceDef = {
     // sensitive, so wrong winding lets the marble fall through onto the shell inside the solid.
     pts.reverse();
     const bowl = new THREE.LatheGeometry(pts, 64);
+    latheUV(bowl, pts);
     bowl.computeVertexNormals();
 
     // Exit chute: starts behind the tube (start cap = back wall) and slopes down to the +X edge,
