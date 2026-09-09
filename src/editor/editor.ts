@@ -20,6 +20,8 @@ const MAX_UNDO = 100;
 const MIN_LEVEL = 0;
 const MAX_LEVEL = 40;
 const PAN_STEP = 1.0;
+/** The phone layout's breakpoint. Must match the "@media (max-width: ...)" block in index.html. */
+const PHONE_LAYOUT = '(max-width: 760px)';
 
 export interface Candidate {
   placed: PlacedPiece;
@@ -742,7 +744,7 @@ export class Editor {
       const g = this.game;
       const flags = [g.timeScale !== 1 ? '慢动作' : '', g.follow ? '跟随中' : '', g.autoSpawn ? '连发中' : '', g.isPaused ? '已暂停' : ''].filter(Boolean).join('  ');
       const back = matchMedia('(pointer: coarse)').matches ? '' : '  [Tab] 回编辑';
-      this.game.hudExtra = `试玩模式  ${flags}${back}`;
+      this.game.hudExtra = `试玩模式  ${flags}${back}`.trimEnd();
       return;
     }
     this.portMarkers.visible = true;
@@ -760,26 +762,31 @@ export class Editor {
     const keyHints = !matchMedia('(pointer: coarse)').matches;
     const tool = this.selectedDef ? `零件 ${this.selectedDef.name}` : '未选零件';
     let line1: string;
+    // Every key named in the running text has to go too, not just the hint line at the bottom.
+    const alt = (n: number) => (keyHints ? `（接法 ${this.snapIndex + 1}/${n}，R 切换）` : `（接法 ${this.snapIndex + 1}/${n}）`);
     if (this.toolMode === 'chain') {
       const state = !this.selectedDef
         ? this.activePort
-          ? `按数字键或点零件栏选零件，会接在橙色接口上${this.chainDir === 'backward' ? '（正在从入口倒着铺）' : ''}`
+          ? `${keyHints ? '按数字键或点零件栏选零件' : '点下面的零件栏选零件'}，会接在橙色接口上${this.chainDir === 'backward' ? '（正在从入口倒着铺）' : ''}`
           : this.game.track.pieces.length === 0
-            ? '轨道为空：选零件后点地面放第一块'
+            ? `轨道为空：选零件后${keyHints ? '点' : '轻点'}地面放第一块`
             : '没有空接口可接：删掉一块再接，或切到自由模式'
         : this.candidateMessage
           ? this.candidateMessage
           : this.candidate?.snapped
-            ? `${this.candidate.closes ? '两端都接上了！' : '接在橙色接口上'}${this.candidate.alternatives > 1 ? `（接法 ${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}，Enter/点击确认`
-            : `自由放置：层 ${this.level}，点地面放置`;
+            ? `${this.candidate.closes ? '两端都接上了！' : '接在橙色接口上'}${this.candidate.alternatives > 1 ? alt(this.candidate.alternatives) : ''}，${keyHints ? 'Enter/点击确认' : '轻点确认'}`
+            : `自由放置：层 ${this.level}，${keyHints ? '点' : '轻点'}地面放置`;
       line1 = `接龙模式  ${tool}  ${state}`;
     } else {
-      const state = this.candidate ? (this.candidate.snapped ? `${this.candidate.closes ? '两端都接上了！' : '吸附'}${this.candidate.alternatives > 1 ? `（${this.snapIndex + 1}/${this.candidate.alternatives}，R 切换）` : ''}` : `自由放置 层 ${this.level} 旋转 ${this.rot * 90}°`) : '';
+      const state = this.candidate ? (this.candidate.snapped ? `${this.candidate.closes ? '两端都接上了！' : '吸附'}${this.candidate.alternatives > 1 ? alt(this.candidate.alternatives) : ''}` : `自由放置 层 ${this.level} 旋转 ${this.rot * 90}°`) : '';
       line1 = `自由模式  ${tool}  ${state}`;
     }
     const variants = this.variantContext ? variantsOf(this.variantContext) : [];
-    const variantHint = variants.length > 1 ? `  V 换规格（${this.variantContext!.family!.label}）` : '';
-    const picked = this.picked ? `  已选中「${this.picked.def.name}」：R 旋转  Delete 删除${this.toolMode === 'free' ? '  Q/E 升降  方向键平移' : ''}${variantHint}` : variantHint;
+    // With no keyboard the key names are noise: the picked-piece panel has 旋转 / 规格 / 删除 /
+    // 升 / 降 on it and the variant bar is right there under the HUD.
+    const variantHint = variants.length > 1 ? (keyHints ? `  V 换规格（${this.variantContext!.family!.label}）` : `  规格：${this.variantContext!.family!.label}`) : '';
+    const pickedKeys = keyHints ? `：R 旋转  Delete 删除${this.toolMode === 'free' ? '  Q/E 升降  方向键平移' : ''}` : '';
+    const picked = this.picked ? `  已选中「${this.picked.def.name}」${pickedKeys}${variantHint}` : variantHint;
     if (!keyHints) return `${line1}${picked}`;
     const line2 =
       this.toolMode === 'chain'
@@ -842,7 +849,20 @@ export class Editor {
     const w = el.offsetWidth || 240;
     const h = el.offsetHeight || 44;
     const x = THREE.MathUtils.clamp(Math.round(s.x), w / 2 + 6, window.innerWidth - w / 2 - 6);
-    const y = THREE.MathUtils.clamp(Math.round(s.y) - 12, h + 6, window.innerHeight - 6);
+    // On the phone layout the toolbar and the HUD are a band across the top of the screen, and
+    // the panel was clamped up underneath them - painted over by the HUD and covering the
+    // toolbar's own buttons. Keep it below the band there. Measured, not guessed: the toolbar
+    // wraps to two rows and grows again when "..." is open, and the HUD grows with its text.
+    let topLimit = 6;
+    if (matchMedia(PHONE_LAYOUT).matches) {
+      const band = Math.max(
+        document.getElementById('hud')?.getBoundingClientRect().bottom ?? 0,
+        document.getElementById('toolbar')?.getBoundingClientRect().bottom ?? 0,
+      );
+      topLimit = band + 6;
+    }
+    const bottomLimit = window.innerHeight - 6;
+    const y = THREE.MathUtils.clamp(Math.round(s.y) - 12, Math.min(topLimit + h, bottomLimit), bottomLimit);
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
     el.dataset.toolMode = this.toolMode;

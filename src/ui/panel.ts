@@ -94,7 +94,6 @@ export function createPanel(editor: Editor, game: Game): void {
           </dl>
           <h4>弹珠</h4>
           <p>底部下拉可换：玻璃珠是标准，钢珠更沉更快，橡胶珠抓地、落地会弹，发光珠会亮，还有鸡蛋。</p>
-          <p>鸡蛋不是圆的，会在螺旋提升机里翻滚卡住——那个零件只适合圆珠。</p>
         </section>
       </div>
     </div>
@@ -117,11 +116,18 @@ export function createPanel(editor: Editor, game: Game): void {
   // own height changes with its message, so anything stacked under them has to follow. CSS gets
   // the measurements as variables rather than a guessed constant.
   // On :root, not on #ui - the HUD is a sibling of #ui, so a variable set there never reaches it.
-  const stack = new ResizeObserver(() => {
+  // --playbar-h is how much room the bottom bar wants, an 8px gap included - it goes to two rows
+  // on a phone, and it is display:none in edit mode, which the observer reports as height 0. So
+  // "0px when the bar is down" falls out of it, and anything sitting above it can just add.
+  const publishSizes = (): void => {
     const css = document.documentElement.style;
     css.setProperty('--toolbar-h', `${Math.round(toolbar.getBoundingClientRect().height)}px`);
     if (hudEl) css.setProperty('--hud-h', `${Math.round(hudEl.getBoundingClientRect().height)}px`);
-  });
+    const bar = document.getElementById('playbar');
+    const barH = bar ? Math.round(bar.getBoundingClientRect().height) : 0;
+    css.setProperty('--playbar-h', `${barH ? barH + 8 : 0}px`);
+  };
+  const stack = new ResizeObserver(publishSizes);
   stack.observe(toolbar);
   if (hudEl) stack.observe(hudEl);
 
@@ -313,9 +319,31 @@ export function createPanel(editor: Editor, game: Game): void {
   });
 
   const playBar = createPlayBar(editor, game, root);
+  const playBarEl = root.querySelector<HTMLDivElement>('#playbar');
+  if (playBarEl) stack.observe(playBarEl);
+
+  // A bar that scrolls sideways is indistinguishable from one that fits, and the scrollbar is
+  // hidden on a phone. Record which end still has content behind it so CSS can fade that edge.
+  const markScroll = (el: HTMLElement): void => {
+    const update = (): void => {
+      const max = el.scrollWidth - el.clientWidth;
+      const state = max <= 1 ? 'none' : el.scrollLeft <= 1 ? 'start' : el.scrollLeft >= max - 1 ? 'end' : 'mid';
+      // Only when it changes: writing the attribute is itself a mutation this observer sees.
+      if (el.dataset.scroll !== state) el.dataset.scroll = state;
+    };
+    el.addEventListener('scroll', update, { passive: true });
+    new ResizeObserver(update).observe(el);
+    new MutationObserver(update).observe(el, { childList: true, subtree: true });
+    update();
+  };
+  markScroll(variantBar);
 
   const refresh = (): void => {
     playBar.refresh();
+    // Straight away, not on the observer's next tick: the play bar appears and disappears with
+    // the mode, and the race panel and the HUD are positioned off its height. Waiting a frame
+    // for the ResizeObserver put them on top of it for that frame.
+    publishSizes();
     root.querySelectorAll<HTMLButtonElement>('.piece').forEach((b) => {
       b.classList.toggle('active', sameFamily(editor.selectedDef, PIECES.get(b.dataset.id ?? '')));
     });
