@@ -140,6 +140,7 @@ function makeLift(ctx: MechanismContext, travel: number): Mechanism {
 
   let t = 0;
   let gateDown = 1; // 1 = fully lowered (open), 0 = raised (closed)
+  let stalled = 0; // seconds the closing phase has been held up by a marble over the bar
   const local = new THREE.Vector3();
   const inv = ctx.quat.clone().invert();
   const setPos = (body: RAPIER.RigidBody, dy: number) => {
@@ -172,20 +173,30 @@ function makeLift(ctx: MechanismContext, travel: number): Mechanism {
       if (wantDown === 0 && gateDown > 0) {
         for (const m of marbles) {
           local.copy(m.pos).sub(ctx.origin).applyQuaternion(inv);
-          if (Math.abs(local.x - GATE_X) < 0.24 && Math.abs(local.z) < 0.4 && local.y > -0.4 && local.y < 0.6) {
+          if (Math.abs(local.x - GATE_X) < 0.15 && Math.abs(local.z) < 0.4 && local.y > -0.4 && local.y < 0.6) {
             blocked = true;
             break;
           }
         }
       }
-      const speed = dt / 0.3;
-      // A marble over the bar must never be lifted by it. Freezing the bar where it stands is not
-      // enough: a marble that comes to rest on a half-raised bar is then wedged, the closing phase
-      // below never completes, and the lift stops cycling for good. Drop the bar back open instead
-      // - lowering away from a marble is always safe - and let it roll on to the car.
-      const goal = blocked ? 1 : wantDown;
-      gateDown += THREE.MathUtils.clamp(goal - gateDown, -speed, speed);
       const closingPhase = t >= T_BOTTOM && t < T_BOTTOM + T_CLOSE;
+      stalled = closingPhase && blocked ? stalled + dt : 0;
+      // A marble over the bar must never be flicked up by it. Freezing the bar where it stands is
+      // not enough: a marble that comes to rest on a half-raised bar is then wedged, the closing
+      // phase below never completes, and the lift stops cycling for good. Drop the bar back open
+      // instead - lowering away from a marble is always safe - and let it roll on to the car.
+      //
+      // But waiting for the bar to clear waits for ever once a queue backs up the ramp: marbles
+      // touch, so the ramp is covered continuously and one of them is always over the bar. Eight
+      // marbles used to deadlock the lift permanently, nought out of eight with no way back. After
+      // a second and a bit of that, close anyway - but at a fifth of the speed. The car sits at the
+      // bottom for the whole of the closing phase, and the bar's top is 50 mm wide, so a marble
+      // lifted that gently rolls straight off it onto the car or back down the ramp. Nothing to
+      // launch it and nowhere to drop.
+      const forced = stalled > 1.2;
+      const speed = dt / (forced ? 1.5 : 0.3);
+      const goal = blocked && !forced ? 1 : wantDown;
+      gateDown += THREE.MathUtils.clamp(goal - gateDown, -speed, speed);
       if (closingPhase && gateDown > 0.001) t = Math.min(t + dt, T_BOTTOM + T_CLOSE - 0.001); // wait until shut
       else t = (t + dt) % CYCLE;
       setPos(car.body, carY);
