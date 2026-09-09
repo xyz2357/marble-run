@@ -64,13 +64,77 @@ export function sweep(
   profile: Profile | ((t: number) => Profile) = TRACK_PROFILE,
   caps = true,
 ): THREE.BufferGeometry {
+  return sweepStations(pathStations(path, segments), profile, caps);
+}
+
+/** The frames `sweep` would use: one per station, evenly spaced along the path. */
+export function pathStations(path: PathFn, segments: number): Station[] {
   const stations: Station[] = [];
   for (let i = 0; i <= segments; i++) {
     const { pos, tan } = path(i / segments);
     const { side, up } = frameFor(tan);
     stations.push({ pos, side, up });
   }
-  return sweepStations(stations, profile, caps);
+  return stations;
+}
+
+/** A section of a walled tube: bore radius, outside radius, and the bore's centre height. */
+export type TubeSection = { rIn: number; rOut: number; centre: number };
+
+/**
+ * A tube with a wall and no seam anywhere. One swept profile cannot describe an annulus - it is
+ * a closed loop, so the ring has to be cut open somewhere to get from the outside to the bore, and
+ * however fine that cut is you can see it: at 2.5 degrees it is a 15 mm slot along the top, and
+ * closing it to nothing leaves a zero-width sliver of coincident faces that shows up just as badly.
+ * So the wall is two sweeps, each a closed ring on its own, with a flat annulus across each end.
+ */
+export function tubeShell(
+  path: PathFn,
+  segments: number,
+  section: (t: number) => TubeSection,
+  ring = 24,
+): THREE.BufferGeometry {
+  const circle = (r: number, centre: number, reverse: boolean): Profile => {
+    const pts: Profile = [];
+    for (let i = 0; i < ring; i++) {
+      const th = (Math.PI * 2 * i) / ring;
+      pts.push([r * Math.cos(th), centre + r * Math.sin(th)]);
+    }
+    return reverse ? pts.reverse() : pts;
+  };
+  const stations = pathStations(path, segments);
+  const outer = sweepStations(stations, (t) => { const s = section(t); return circle(s.rOut, s.centre, false); }, false);
+  const inner = sweepStations(stations, (t) => { const s = section(t); return circle(s.rIn, s.centre, true); }, false);
+
+  // Flat ring across each mouth. The start faces back down the path, the end faces along it, which
+  // is the winding each one needs for its normal to point out of the solid.
+  const rings: THREE.BufferGeometry[] = [];
+  for (const at of [0, 1] as const) {
+    const st = stations[at === 0 ? 0 : stations.length - 1];
+    const s = section(at);
+    const pos: number[] = [];
+    const idx: number[] = [];
+    for (let i = 0; i < ring; i++) {
+      const th = (Math.PI * 2 * i) / ring;
+      for (const r of [s.rIn, s.rOut]) {
+        const u = r * Math.cos(th);
+        const v = s.centre + r * Math.sin(th);
+        pos.push(st.pos.x + st.side.x * u + st.up.x * v, st.pos.y + st.side.y * u + st.up.y * v, st.pos.z + st.side.z * u + st.up.z * v);
+      }
+    }
+    for (let i = 0; i < ring; i++) {
+      const a = i * 2;
+      const b = ((i + 1) % ring) * 2;
+      if (at === 0) idx.push(a, a + 1, b + 1, a, b + 1, b);
+      else idx.push(a, b + 1, a + 1, a, b, b + 1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    rings.push(g);
+  }
+  return mergeGeometries([outer, inner, ...rings]);
 }
 
 /**

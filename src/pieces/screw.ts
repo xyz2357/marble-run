@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { boxGeo, linePath, mergeGeometries, slopePath, sweep, sweepStations, trimeshArrays, type Profile, type Station } from '../geometry/sweep';
+import { boxGeo, linePath, mergeGeometries, slopePath, sweep, sweepStations, trimeshArrays, tubeShell, type Profile, type Station } from '../geometry/sweep';
 import { v3, type BuiltPiece, type Mechanism, type MechanismContext, type PieceDef } from './types';
 
 /**
@@ -44,7 +44,18 @@ const PERIOD = 2;
  * did. The mouth is capped and the marble is dropped in through the top instead, landing in the
  * first pocket of the blade.
  */
-const SEAM = THREE.MathUtils.degToRad(2.5);
+const SEAM = 0;
+/** Where the tube starts and ends, measured along the axis from A0, and where the window closes. */
+const BORE_FROM = -0.15;
+/**
+ * Marbles leave through the mouth at the top, not through a hatch in the tube. There used to be
+ * one: the seam swung round to the underside over the last fifth and opened to 52 degrees, on the
+ * grounds that a marble running out of the end has only the 0.3 m/s the blade gives it and would
+ * drop into the gap under the tube. There is no gap any more - the catch deck starts at the mouth -
+ * and with the deck there the hatch turns out to do nothing at all: measured, marbles were already
+ * leaving at axial 4.48 to 4.51 against a bore that ends at 4.50. Closing it delivers 6 of 6 for
+ * glass, steel and rubber alike, and the tube is a tube.
+ */
 const INLET = THREE.MathUtils.degToRad(70);
 /** Fraction of the bore's length taken up by the inlet window. A narrow one (46 degrees over the
  *  first 17%) was not forgiving enough: a marble that had queued behind another arrived a little
@@ -54,16 +65,6 @@ const INLET = THREE.MathUtils.degToRad(70);
  *  15 off a fast feed; a shell around the tube stopped that but looked like exactly what it was, a
  *  sleeve bolted over the outside, so it is not there. */
 const INLET_END = 0.34;
-/**
- * Near the top the seam swings round to the UNDERSIDE and opens out, so the marble simply drops
- * through onto the catch deck. Letting it run out of the end does not work: it leaves the mouth
- * at the 0.3 m/s the blade gives it, which is nowhere near enough to reach anything, and it just
- * falls into the gap under the tube. Turning the screw fast enough to throw it clear would fling
- * it instead.
- */
-const OUTLET = THREE.MathUtils.degToRad(52);
-const OUTLET_FROM = 0.82;
-const OUTLET_OPEN = 0.95;
 const RING = 20;
 
 /**
@@ -98,21 +99,22 @@ const OUT_PORT = v3(3.5, 2.5, 0);
  * Where the catch deck starts: the first point at the out port's height that is clear of the tube,
  * i.e. where the tube's underside crosses it. The deck used to begin 0.35 back and 0.5 below A1,
  * which is 0.16 from the axis - a plank run through the middle of a glass tube. It was load-bearing
- * there, because the bore's underside opens well before the mouth, so the outlet had to move back
- * to suit (see OUTLET_FROM) rather than the deck reaching in to catch marbles early.
+ * there, holding marbles up over the stretch where the old underside hatch had taken the floor
+ * away; with the hatch gone the bore carries them to the mouth itself and they land on this.
  */
 const UNDER_AXIAL = (OUT_PORT.y - A0.y + (BORE + WALL) * DIR.x) / DIR.y;
 const EXIT_START = v3(A0.x + UNDER_AXIAL * DIR.x + (BORE + WALL) * DIR.y, OUT_PORT.y, 0);
 
-/** Bore cross-section: an annulus split by a seam at the top, outer ring CCW then inner ring CW,
- *  so the outside faces out and the bore faces the marble. */
-function boreProfile(t = 1): Profile {
-  const inlet = t >= INLET_END ? SEAM : SEAM + (INLET - SEAM) * (1 - smooth(t / INLET_END));
-  const swing = smooth(THREE.MathUtils.clamp((t - OUTLET_FROM) / (OUTLET_OPEN - OUTLET_FROM), 0, 1));
-  const gap = Math.max(inlet, SEAM + (OUTLET - SEAM) * swing);
-  // Seam centre swings from the top of the bore to the bottom as the outlet opens.
-  const centre = Math.PI / 2 - Math.PI * swing;
-  const a0 = centre + gap;
+/**
+ * Cross-section over the inlet: an annulus split by the window at the top, outer ring CCW then
+ * inner ring CW, so the outside faces out and the bore faces the marble. The window closes to
+ * nothing by the end of this stretch, where the plain closed tube takes over - a split ring is the
+ * only way to draw an annulus with an opening in it, and it is worth having only where there is an
+ * opening to draw.
+ */
+function inletProfile(t = 1): Profile {
+  const gap = INLET * (1 - smooth(t));
+  const a0 = Math.PI / 2 + gap;
   const span = Math.PI * 2 - 2 * gap;
   const pts: Profile = [];
   for (let i = 0; i <= RING; i++) {
@@ -195,7 +197,13 @@ export const screwDef: PieceDef = {
     // Runs to just short of the inlet window and drops the marble in through the top of the bore.
     const feed = sweep(slopePath(IN_PORT, v3(A0.x - 0.35, A0.y + 0.5, 0)), 14);
     const exit = sweep(slopePath(EXIT_START, OUT_PORT), 16);
-    const bore = sweep(linePath(A0.clone().addScaledVector(DIR, -0.15), A1.clone().addScaledVector(DIR, OVERRUN)), 96, boreProfile);
+    const at = (a: number) => A0.clone().addScaledVector(DIR, a);
+    const boreTo = LENGTH + OVERRUN;
+    const inletTo = BORE_FROM + (boreTo - BORE_FROM) * INLET_END;
+    const bore = mergeGeometries([
+      sweep(linePath(at(BORE_FROM), at(inletTo)), 32, inletProfile, false),
+      tubeShell(linePath(at(inletTo), at(boreTo)), 64, () => ({ rIn: BORE, rOut: BORE + WALL, centre: 0 }), RING),
+    ]);
     // Cap over the lower mouth, which otherwise faces down and lets everything fall out again.
     const capQ = new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), DIR);
     const cap = new THREE.CylinderGeometry(BORE + WALL, BORE + WALL, 0.04, 24);
