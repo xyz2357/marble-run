@@ -60,20 +60,46 @@ export const slopeDef: PieceDef = {
   },
 };
 
-/** Steep slope: 1 cell long, drops one level. */
-export const slopeSteepDef: PieceDef = {
-  id: 'slope_steep',
-  name: '陡坡',
-  footprint: [{ x: 0, z: 0 }],
-  heightUnits: 2,
-  ports: [
-    { pos: v3(-0.5, H, 0), dir: NX, kind: 'in' },
-    { pos: v3(0.5, 0, 0), dir: PX, kind: 'out' },
-  ],
-  build() {
-    return { parts: [{ geometry: sweep(slopePath(v3(-0.5, H, 0), v3(0.5, 0, 0)), 16), material: 'wood' }] };
-  },
-};
+/**
+ * Steep slope, `cells` long and dropping one level per cell: the same 27 degree average whatever
+ * length you pick.
+ *
+ * Length is a variant rather than something you get by chaining, because chaining is exactly what
+ * hurts. `slopePath` eases the height with a smoothstep, so a slope is LEVEL at both ends - right
+ * when it meets a flat piece, but it means a run made of N one-cell slopes is a washboard with a
+ * crest every metre. A marble holds the deck over a crest only while v^2 * |y''| <= g, and a
+ * one-cell steep has y'' = 3, so anything past 1.8 m/s leaves the deck at the top of every single
+ * one. It lands back in a round trough slightly off centre, which turns a little of the fall into
+ * sideways speed - measured at 1.83 m/s from one contact - and after a dozen of them the marble is
+ * out of the track altogether: 7 m off to the side, and dragged up to 11 m/s on the way.
+ *
+ * One long piece has the same drop spread over its whole length, so y'' falls as 1/cells - 3.0,
+ * 1.5, 1.0, 0.75 for one to four cells, or 1.8, 2.6, 3.1 and 3.6 m/s before it leaves the deck -
+ * and there are no joints inside it to leave at all.
+ *
+ * The cost is occupancy: a piece claims a box, so a 4-cell steep reserves 4 cells over 5 levels
+ * rather than the diagonal it actually fills, and you cannot run track under its lower end.
+ */
+export function slopeSteepDef(cells: number): PieceDef {
+  return {
+    id: cells === 1 ? 'slope_steep' : `slope_steep${cells}`,
+    name: cells === 1 ? '陡坡' : `陡坡 ${cells} 格`,
+    family: { id: 'slope_steep', label: `${cells} 格` },
+    footprint: Array.from({ length: cells }, (_, x) => ({ x, z: 0 })),
+    heightUnits: cells + 1,
+    ports: [
+      { pos: v3(-0.5, cells * H, 0), dir: NX, kind: 'in' },
+      { pos: v3(cells - 0.5, 0, 0), dir: PX, kind: 'out' },
+    ],
+    build() {
+      return {
+        parts: [
+          { geometry: sweep(slopePath(v3(-0.5, cells * H, 0), v3(cells - 0.5, 0, 0)), 16 * cells), material: 'wood' },
+        ],
+      };
+    },
+  };
+}
 
 function curveDef(id: string, name: string, dirSign: 1 | -1): PieceDef {
   // Quarter arc of radius 0.5 inside one cell. Enter at -X edge heading +X, exit at +/-Z edge.

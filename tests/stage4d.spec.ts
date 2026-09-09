@@ -196,3 +196,49 @@ test('demo 3 (helix, jump, wheel, random splitter) is closed and delivers marble
   await page.screenshot({ path: 'test-results/stage4d-demo3.png' });
   expect(done).toBe(true);
 });
+
+test('a steep slope comes in four lengths, and the long ones ride better than a chain of short ones', async ({ page }) => {
+  // Length is a variant precisely so you do not have to chain the short one. slopePath levels a
+  // slope off at both ends, so N one-cell steeps make a washboard with a crest every metre, and a
+  // marble leaves the deck at each crest above 1.8 m/s. Spreading the same drop over one long piece
+  // takes the crest curvature down as 1/cells and leaves no joints inside at all.
+  await boot(page);
+  await page.evaluate(() => window.__TEST__.clearTrack());
+  const palette = await page.evaluate(() => window.__TEST__.paletteIds());
+  expect(palette, 'the four lengths fold into one palette entry').toContain('slope_steep');
+  expect(palette).not.toContain('slope_steep4');
+  await page.evaluate(() => {
+    window.__TEST__.setToolMode('free');
+    window.__TEST__.select('slope_steep');
+  });
+  expect(await page.evaluate(() => window.__TEST__.variants())).toEqual([
+    'slope_steep', 'slope_steep2', 'slope_steep3', 'slope_steep4',
+  ]);
+
+  // The same 4 m of descent, built out of eight one-cell steeps and out of two four-cell ones.
+  const descent = (cells: number) => {
+    const n = 8 / cells;
+    const def = cells === 1 ? 'slope_steep' : `slope_steep${cells}`;
+    const pieces: Placed[] = [{ def: 'start', cell: { x: -1, z: 0 }, level: 9, rot: 0 }];
+    for (let i = 0; i < n; i++) pieces.push({ def, cell: { x: i * cells, z: 0 }, level: 9 - (i + 1) * cells, rot: 0 });
+    pieces.push({ def: 'end', cell: { x: 8, z: 0 }, level: 1, rot: 0 });
+    return pieces;
+  };
+  for (const cells of [1, 4]) {
+    await loadTrack(page, descent(cells));
+    await page.evaluate(() => window.__TEST__.spawnBurst(1));
+    const { samples, done } = await run(page, 40, 1);
+    const maxZ = Math.max(...samples.flat().map((m) => Math.abs(m.z)));
+    const maxV = Math.max(...samples.flat().map((m) => Math.hypot(m.vx, m.vy, m.vz)));
+    console.log(`steep x${cells}: ${done ? 'scored' : 'LOST'} max|z|=${maxZ.toFixed(2)} maxSpeed=${maxV.toFixed(2)}`);
+    // Only the long one is held to it. The chain of eight loses about one marble in six - it is
+    // logged above as the comparison, not asserted, because asserting it would be asserting a coin
+    // flip. Measured over six runs each: eight one-cell 5/6, and the marble that went reached 2.2 m
+    // off to the side; two four-cell 6/6, never past 0.18, and faster for it - 7.6 m/s against 5.3,
+    // because it is not spending the drop on bouncing.
+    if (cells === 1) continue;
+    expect(done, `a ${cells}-cell steep run delivers`).toBe(true);
+    // Anything past the rails at 0.36 has left the track.
+    expect(maxZ, `a ${cells}-cell steep run keeps the marble in the trough`).toBeLessThan(0.36);
+  }
+});
