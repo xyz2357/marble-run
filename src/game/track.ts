@@ -260,6 +260,31 @@ export class Track {
     });
   }
 
+  /**
+   * Why this list of pieces cannot be built as a track, or null if it can. The same rules as
+   * `canPlace`, but checked against the list itself, so a file can be turned away before anything
+   * is loaded. Import used to skip this entirely and would happily build a track the editor would
+   * never have let you draw - pieces underground at a negative level, or two in the same cell -
+   * with no error and no way to tell from looking at it.
+   */
+  whyNotLoadable(pieces: PlacedPiece[]): string | null {
+    const occ = new Map<string, number>();
+    for (let i = 0; i < pieces.length; i++) {
+      const placed = pieces[i];
+      const def = getPiece(placed.def);
+      if (!def) return `第 ${i + 1} 个零件类型未知：${String(placed.def)}`;
+      const where = `第 ${i + 1} 个零件「${def.name}」`;
+      if (placed.level - (def.depthUnits ?? 0) < 0) return `${where}在第 ${placed.level} 层，会伸到地面以下`;
+      if (worldPorts(def, placed).some((p) => p.pos.y < -1e-6)) return `${where}的接口在地面以下`;
+      for (const k of slotKeys(def, placed)) {
+        const hit = occ.get(k);
+        if (hit !== undefined) return `${where}和第 ${hit + 1} 个零件占了同一格`;
+        occ.set(k, i);
+      }
+    }
+    return null;
+  }
+
   /** Find the piece instance a raycast hit belongs to. */
   instanceFromObject(obj: THREE.Object3D | null): TrackPieceInstance | null {
     let o: THREE.Object3D | null = obj;

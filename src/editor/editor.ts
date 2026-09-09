@@ -473,6 +473,8 @@ export class Editor {
         rot: (((Math.round(Number(p.rot) || 0) % 4) + 4) % 4) as 0 | 1 | 2 | 3,
       };
     });
+    const bad = this.game.track.whyNotLoadable(pieces);
+    if (bad) throw new Error(`无效的存档：${bad}`);
     this.pushUndo();
     this.game.track.load(pieces);
     this.game.frameTrack();

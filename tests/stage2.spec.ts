@@ -197,3 +197,40 @@ test('export/import round trip and play mode runs the marble', async ({ page }) 
   await page.evaluate(() => window.__TEST__.frameTrack());
   await page.screenshot({ path: 'test-results/stage2-play.png' });
 });
+
+test('import turns away a track the editor would never have let you draw', async ({ page }) => {
+  // Loading skipped canPlace entirely, so a hand-edited file could put a piece at a negative level
+  // or two pieces in one cell and the app would build it without a word - an unplayable track that
+  // looks fine until marbles roll through the floor. It now refuses, names the piece, and leaves
+  // whatever was already loaded alone.
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto('/');
+  await page.waitForFunction(() => window.__TEST__?.ready === true, null, { timeout: 30_000 });
+  const good = JSON.stringify({
+    version: 1,
+    pieces: [
+      { def: 'start', cell: { x: 0, z: 0 }, level: 4, rot: 0 },
+      { def: 'slope', cell: { x: 1, z: 0 }, level: 3, rot: 0 },
+      { def: 'end', cell: { x: 3, z: 0 }, level: 3, rot: 0 },
+    ],
+  });
+  await page.evaluate((t) => window.__TEST__.importJSON(t), good);
+  const bad: [string, unknown][] = [
+    ['a piece below the ground', { version: 1, pieces: [{ def: 'start', cell: { x: 0, z: 0 }, level: -5, rot: 0 }] }],
+    ['two pieces in one cell', { version: 1, pieces: [
+      { def: 'straight', cell: { x: 0, z: 0 }, level: 3, rot: 0 },
+      { def: 'straight', cell: { x: 0, z: 0 }, level: 3, rot: 0 },
+    ] }],
+    // A lift reaches a level below its anchor, so level 0 puts its shaft through the ground.
+    ['a lift with no room under it', { version: 1, pieces: [{ def: 'lift4', cell: { x: 0, z: 0 }, level: 0, rot: 0 }] }],
+  ];
+  for (const [what, data] of bad) {
+    const r = await page.evaluate((t) => {
+      try { window.__TEST__.importJSON(t); return null; } catch (e) { return String((e as Error).message); }
+    }, JSON.stringify(data));
+    expect(r, `${what} is refused`).toContain('无效的存档');
+    expect(await page.evaluate(() => window.__TEST__.pieces().length), `${what} leaves the track alone`).toBe(3);
+  }
+  expect(errors, 'refusing is not an uncaught error').toEqual([]);
+});

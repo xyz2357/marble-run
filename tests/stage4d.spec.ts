@@ -167,11 +167,12 @@ test('piece families: one palette entry per family, V switches the placed piece 
 
 test('family variants are real pieces: a 4-level lift and a fast gate deliver the marble', async ({ page }) => {
   await loadTrack(page, [
-    { def: 'start', cell: { x: 0, z: 0 }, level: 0, rot: 0 },
-    { def: 'straight', cell: { x: 1, z: 0 }, level: 0, rot: 0 },
-    { def: 'lift4', cell: { x: 2, z: 0 }, level: 0, rot: 0 },
-    { def: 'gate_fast', cell: { x: 4, z: 0 }, level: 3, rot: 0 },
-    { def: 'end', cell: { x: 5, z: 0 }, level: 3, rot: 0 },
+    // The lift's shaft goes one level below its anchor, so it cannot sit at level 0.
+    { def: 'start', cell: { x: 0, z: 0 }, level: 1, rot: 0 },
+    { def: 'straight', cell: { x: 1, z: 0 }, level: 1, rot: 0 },
+    { def: 'lift4', cell: { x: 2, z: 0 }, level: 1, rot: 0 },
+    { def: 'gate_fast', cell: { x: 4, z: 0 }, level: 4, rot: 0 },
+    { def: 'end', cell: { x: 5, z: 0 }, level: 4, rot: 0 },
   ]);
   const { done } = await run(page, 30, 1);
   const results = await page.evaluate(() => window.__TEST__.results());

@@ -45,10 +45,12 @@ async function runSeconds(page: Page, seconds: number, onSecond?: (s: number) =>
 
 test('lift carries the marble up six levels to the exit', async ({ page }) => {
   await loadTrack(page, [
-    { def: 'start', cell: { x: 0, z: 0 }, level: 1, rot: 0 },
-    { def: 'slope_steep', cell: { x: 1, z: 0 }, level: 0, rot: 0 },
-    { def: 'lift6', cell: { x: 2, z: 0 }, level: 0, rot: 0 },
-    { def: 'end', cell: { x: 4, z: 0 }, level: 6, rot: 0 },
+    // A lift reaches one level BELOW its anchor, so level 0 buries its shaft in the ground - the
+    // editor refuses it and, since import started checking too, so does this. One level up.
+    { def: 'start', cell: { x: 0, z: 0 }, level: 2, rot: 0 },
+    { def: 'slope_steep', cell: { x: 1, z: 0 }, level: 1, rot: 0 },
+    { def: 'lift6', cell: { x: 2, z: 0 }, level: 1, rot: 0 },
+    { def: 'end', cell: { x: 4, z: 0 }, level: 7, rot: 0 },
   ]);
   let maxY = -Infinity;
   const trail: string[] = [];
