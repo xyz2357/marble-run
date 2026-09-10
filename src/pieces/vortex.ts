@@ -118,9 +118,15 @@ export const vortexDef: PieceDef = {
     // so the marble is handed to the bowl over a 15 mm lip instead of dropped off a ledge.
     const CLEAR_RIM = -rimY;
     const CLEAR_END = 0.015;
+    /** 0 until the very end of the run in, 1 at the tip. */
+    const tail = (r: number) => {
+      const span = (rimR - endR) * 0.15;
+      const u = Math.min(1, Math.max(0, (rimR - (rimR - endR) * 0.85 - r) / span));
+      return u * u * (3 - 2 * u);
+    };
     const leadY = (t: number) => {
       const r = leadR(t);
-      return surfaceY(r) - rimY + (CLEAR_END - CLEAR_RIM) * tip(r);
+      return surfaceY(r) - rimY + (CLEAR_END - CLEAR_RIM) * tip(r) - SINK * tail(r);
     };
     // The rail on the bowl side flattens to a low kerb as the deck comes inside, so the entry reads
     // as a groove cut through the rim rather than a wall standing in the bowl - and an orbiting
@@ -129,12 +135,25 @@ export const vortexDef: PieceDef = {
     const leadEnd: typeof TRACK_PROFILE = TRACK_PROFILE.map(([s, u]) =>
       s < 0 && u === RAIL_HEIGHT ? [s, KERB] : [s, u],
     );
+    // Over the last stretch the deck flattens into a thin plate and sinks below the bowl's surface.
+    // Without it the sweep simply stops, and a full cross-section standing proud of the bowl is a
+    // block sticking out of the floor with its end cap facing you - and its outer rail runs into
+    // the end of the rim lip. By the time this bites the marble is at r 1.35 or less, well inside
+    // the lip, so the bowl's own surface takes over as the floor and the deck can go and hide.
+    const leadTail: typeof TRACK_PROFILE = TRACK_PROFILE.map(([s, u]) => [s * 0.85, u > 0 ? -0.02 : -0.06]);
+    // How far under the bowl's surface the tip finishes. The bowl is a shell 0.08 thick and the
+    // tail's section is 0.04 deep, so 0.035 lands the whole thing inside the shell: buried from
+    // above, and not poking out of the underside either. It was 0.07 first, which did show.
+    const SINK = 0.035;
     const leadIn = sweep(arcPath(v3(-2.5, 0, LEAD_R), LEAD_R, 0, theta, 1, (t) => {
       const h = 1e-3;
       const t0 = Math.max(0, t - h);
       const t1 = Math.min(1, t + h);
       return { y: leadY(t), dy: (leadY(t1) - leadY(t0)) / (t1 - t0) };
-    }), 28, (t) => lerpProfile(TRACK_PROFILE, leadEnd, tip(leadR(t))));
+    }), 28, (t) => {
+      const r = leadR(t);
+      return lerpProfile(lerpProfile(TRACK_PROFILE, leadEnd, tip(r)), leadTail, tail(r));
+    });
 
     // Rim lip with a gap where the lead-in crosses. Lathe angle phi -> (r sin phi, y, r cos phi).
     const release = leadPt(theta);
