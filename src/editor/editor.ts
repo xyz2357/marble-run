@@ -148,6 +148,7 @@ export class Editor {
 
   setMode(mode: Mode): void {
     this.mode = mode;
+    this.game.setGridWanted(mode === 'edit');
     this.game.clearMarbles();
     if (mode === 'play') {
       this.ghost.hide();
@@ -633,6 +634,12 @@ export class Editor {
         case 'c':
           g.setFollow(!g.follow);
           break;
+        case 'x':
+          g.cycleSpeed();
+          break;
+        case 'l':
+          g.setTabletop(!g.tabletop);
+          break;
         case 'p':
           g.setPaused(!g.isPaused);
           this.changed();
@@ -744,7 +751,7 @@ export class Editor {
       const panel = (this.pickedPanel ??= document.getElementById('picked-panel'));
       if (panel) panel.hidden = true;
       const g = this.game;
-      const flags = [g.timeScale !== 1 ? '慢动作' : '', g.follow ? '跟随中' : '', g.autoSpawn ? '连发中' : '', g.isPaused ? '已暂停' : ''].filter(Boolean).join('  ');
+      const flags = [g.timeScale !== 1 ? '慢动作' : '', g.speed !== 1 ? `快放×${g.speed}` : '', g.follow ? '跟随中' : '', g.autoSpawn ? '连发中' : '', g.isPaused ? '已暂停' : ''].filter(Boolean).join('  ');
       const back = matchMedia('(pointer: coarse)').matches ? '' : '  [Tab] 回编辑';
       this.game.hudExtra = `试玩模式  ${flags}${back}`.trimEnd();
       return;

@@ -17,6 +17,11 @@ async function boot(): Promise<void> {
   if (!editor.loadAutosave()) editor.loadDemo();
   game.frameTrack();
   editor.setMode('edit');
+  try {
+    if (localStorage.getItem('marble-run.tabletop') === '1') game.setTabletop(true);
+  } catch {
+    /* ignore */
+  }
 
   installTestSeam(game, editor);
   game.start();

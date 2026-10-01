@@ -142,6 +142,46 @@ export function buildLoopDemo(track: Track): void {
     .add('end');
 }
 
+/**
+ * Demo 8: a compact tower, after the 3D-printed desk toys - everything stacked on one 5x5 patch
+ * instead of strung out across the floor, so the marble keeps vanishing behind or under track it
+ * has already run and coming out somewhere else.
+ *
+ * A square ring round the outside at the top (levels 12 -> 9), into a twin helix in the middle
+ * (9 -> 5), then a second ring round the outside underneath the first (5 -> 1) and out the front.
+ * The rings only ever use the outer cells, so they clear the helix's 3x3 block; the two rings
+ * share those cells at levels four apart.
+ */
+export function buildTowerDemo(track: Track): void {
+  const b = new ChainBuilder(track);
+  // rot 3 starts it heading +Z, up the -X side; every corner is a left turn.
+  b.begin({ def: 'start', cell: { x: -2, z: 0 }, level: 12, rot: 3 })
+    .add('straight')
+    .add('curve_l')
+    .add('slope')
+    .add('straight')
+    .add('curve_l')
+    .add('slope')
+    .add('straight')
+    .add('curve_l')
+    .add('slope')
+    .add('straight')
+    .add('curve_l')
+    .add('curve_l')
+    .add('helix2')
+    .add('curve_l')
+    .add('curve_l')
+    .add('slope')
+    .add('straight')
+    .add('curve_l')
+    .add('slope')
+    .add('straight')
+    .add('curve_l')
+    .add('slope')
+    .add('slope')
+    .add('end');
+}
+
 export interface DemoDef {
   /** Label in the toolbar's demo picker. */
   name: string;
@@ -159,4 +199,5 @@ export const DEMOS: DemoDef[] = [
   { name: '示例 5 · 快慢对决', hint: '分叉 → 冰道+跳台 对 减速带 → 合流', build: buildRaceDemo },
   { name: '示例 6 · 规格巡礼', hint: '同族零件的其他规格：短电梯、双圈螺旋、快闸门、小水车', build: buildVariantDemo },
   { name: '示例 7 · 环形与大水车', hint: '先翻一整圈，再让大水车一次降 8 层', build: buildLoopDemo },
+  { name: '示例 8 · 桌面塔', hint: '外圈 → 中间双圈螺旋 → 下层外圈，叠在 5x5 里；试玩时按「桌面」看', build: buildTowerDemo },
 ];

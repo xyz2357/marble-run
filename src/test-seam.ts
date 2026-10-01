@@ -140,6 +140,9 @@ export function installTestSeam(game: Game, editor: Editor): void {
     cycleVariant: (dir = 1) => editor.cycleVariant(dir),
     paletteIds: () => paletteDefs().map((d) => d.id),
     frameTrack: () => game.frameTrack(),
+    /** Desk-toy look and playback speed. */
+    setTabletop: (on: boolean) => game.setTabletop(on),
+    look: () => ({ tabletop: game.tabletop, speed: game.speed, marbleType: game.marbleType, fov: game.camera.fov }),
     /** Orthographic-like top view over a point (debugging geometry). */
     topView: (x: number, y: number, z: number, height: number) => {
       game.controls.target.set(x, y, z);

@@ -1,6 +1,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FIXED_DT, PhysicsWorld } from '../physics/world';
 import { AudioEngine, type MarbleAudioState } from './audio';
 import { spawnMarble, removeMarble, getMarbleType, type Marble } from './marble';
@@ -12,6 +16,19 @@ const MAX_MARBLES = 60;
 const BURST_INTERVAL = 0.35;
 const AUTO_INTERVAL = 1.2;
 const MAX_STEPS_PER_FRAME = 8;
+/** Playback speeds the play bar cycles through. */
+export const SPEEDS = [1, 2, 3, 4];
+
+/**
+ * Two looks for the same scene. 'workshop' is the editor's: sky, grid. 'tabletop' imitates a desk
+ * toy filmed up close: a white table, no grid, a long lens with the background out of focus. The
+ * track itself keeps its own material either way.
+ */
+const LOOKS = {
+  workshop: { sky: 0x9fc5e8, fogNear: 40, fogFar: 120, ground: 0xcfd8c2, hemi: 0.6, bounce: 0x8a7a5a, sun: 2.2, fov: 50 },
+  // A white table throws light back up under the track, so the bounce colour is near-white too.
+  tabletop: { sky: 0xe9e6e1, fogNear: 30, fogFar: 90, ground: 0xf4f2ee, hemi: 1.3, bounce: 0xd9d4ca, sun: 1.6, fov: 30 },
+};
 
 export interface RaceResult {
   id: number;
@@ -37,6 +54,13 @@ export class Game {
   simTime = 0;
   /** 1 = realtime, 0.25 = slow motion. */
   timeScale = 1;
+  /**
+   * Playback rate on top of `timeScale`. Only how many fixed steps run per wall-clock second
+   * changes, so every tuned mechanism behaves exactly as at 1x - it just plays back faster.
+   */
+  speed = 1;
+  /** Desk-toy look (see LOOKS). */
+  tabletop = false;
   /** Follow the leading marble with the camera. */
   follow = false;
   /** Keep spawning a marble every AUTO_INTERVAL seconds. */
@@ -61,6 +85,16 @@ export class Game {
   private nextAutoSpawn = 0;
   private colorIndex = 0;
   private tmpV = new THREE.Vector3();
+  private hemi!: THREE.HemisphereLight;
+  private sun!: THREE.DirectionalLight;
+  private groundMat!: THREE.MeshStandardMaterial;
+  private grid!: THREE.GridHelper;
+  private gridWanted = true;
+  /** Built the first time the tabletop look is switched on. */
+  private composer: EffectComposer | null = null;
+  private bokeh: BokehPass | null = null;
+  /** Marble type to go back to when the tabletop look (which brings steel balls) is switched off. */
+  private typeBeforeTabletop: string | null = null;
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -99,9 +133,9 @@ export class Game {
   }
 
   private setupLights(): void {
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x8a7a5a, 0.6);
+    const hemi = (this.hemi = new THREE.HemisphereLight(0xffffff, 0x8a7a5a, 0.6));
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    const sun = (this.sun = new THREE.DirectionalLight(0xffffff, 2.2));
     sun.position.set(10, 15, 8);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -117,7 +151,7 @@ export class Game {
   }
 
   private setupGround(): void {
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0xcfd8c2, roughness: 0.95 });
+    const groundMat = (this.groundMat = new THREE.MeshStandardMaterial({ color: 0xcfd8c2, roughness: 0.95 }));
     const ground = new THREE.Mesh(new THREE.BoxGeometry(80, 0.2, 80), groundMat);
     ground.position.y = -0.1;
     ground.receiveShadow = true;
@@ -126,9 +160,70 @@ export class Game {
     this.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(40, 0.1, 40).setFriction(0.8), gBody);
 
     // Grid lines on cell boundaries (cells are centered on integer coordinates).
-    const grid = new THREE.GridHelper(80, 80, 0x99a08a, 0xb5bca8);
+    const grid = (this.grid = new THREE.GridHelper(80, 80, 0x99a08a, 0xb5bca8));
     grid.position.set(0.5, 0.01, 0.5);
     this.scene.add(grid);
+  }
+
+  /** The editor wants the grid while building; the tabletop look hides it otherwise. */
+  setGridWanted(on: boolean): void {
+    this.gridWanted = on;
+    this.grid.visible = on || !this.tabletop;
+  }
+
+  /**
+   * Switch between the workshop and the tabletop look. The tabletop look also swaps in steel balls,
+   * a long lens framed low on the track, and 2x playback; switching back undoes all of it.
+   */
+  setTabletop(on: boolean): void {
+    if (on === this.tabletop) return;
+    this.tabletop = on;
+    const look = on ? LOOKS.tabletop : LOOKS.workshop;
+    (this.scene.background as THREE.Color).set(look.sky);
+    const fog = this.scene.fog as THREE.Fog;
+    fog.color.set(look.sky);
+    fog.near = look.fogNear;
+    fog.far = look.fogFar;
+    this.groundMat.color.set(look.ground);
+    this.hemi.intensity = look.hemi;
+    this.hemi.groundColor.set(look.bounce);
+    this.sun.intensity = look.sun;
+    this.camera.fov = look.fov;
+    this.camera.updateProjectionMatrix();
+    this.grid.visible = this.gridWanted || !on;
+
+    if (on) {
+      this.typeBeforeTabletop = this.marbleType;
+      this.marbleType = 'steel';
+      if (this.speed === 1) this.speed = 2;
+      this.ensureComposer();
+    } else {
+      if (this.marbleType === 'steel' && this.typeBeforeTabletop) this.marbleType = this.typeBeforeTabletop;
+      this.typeBeforeTabletop = null;
+      this.speed = 1;
+    }
+    this.frameTrack();
+    try {
+      localStorage.setItem('marble-run.tabletop', on ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+    this.onRaceChange?.();
+  }
+
+  private ensureComposer(): void {
+    if (this.composer) return;
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const composer = new EffectComposer(this.renderer);
+    composer.setPixelRatio(this.renderer.getPixelRatio());
+    composer.setSize(size.x, size.y);
+    composer.addPass(new RenderPass(this.scene, this.camera));
+    // Blur grows with distance from the focal plane: factor = (focus - depth) * aperture, in UV
+    // units. Focused ~15 m out, the far edge of the table is ~10 m behind it -> ~0.005.
+    this.bokeh = new BokehPass(this.scene, this.camera, { focus: 15, aperture: 0.0005, maxblur: 0.008 });
+    composer.addPass(this.bokeh);
+    composer.addPass(new OutputPass());
+    this.composer = composer;
   }
 
   // ---------------------------------------------------------------- camera
@@ -144,10 +239,16 @@ export class Game {
     }
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const radius = Math.max(size.x, size.y, size.z, 4) * 0.5;
+    // Half the box diagonal: the longest side alone is fine for a track strung out along the floor,
+    // but crops a compact tower whose height and width are both close to the longest side.
+    const radius = Math.max(size.length(), 4) * 0.5;
     this.controls.target.copy(center);
-    const dist = (radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2))) * 0.9;
-    this.camera.position.copy(center).add(new THREE.Vector3(0.7, 0.6, 1).normalize().multiplyScalar(dist));
+    // Tabletop: product-shot framing - a long lens, low over the table (about 14 degrees up), the
+    // track filling the frame, the way the desk toy is filmed rather than the editor's high iso view.
+    const fill = this.tabletop ? 0.95 : 0.9;
+    const dir = this.tabletop ? new THREE.Vector3(0.75, 0.32, 1) : new THREE.Vector3(0.7, 0.6, 1);
+    const dist = (radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2))) * fill;
+    this.camera.position.copy(center).add(dir.normalize().multiplyScalar(dist));
     this.controls.update();
   }
 
@@ -258,6 +359,15 @@ export class Game {
     this.onRaceChange?.();
   }
 
+  setSpeed(s: number): void {
+    this.speed = s;
+    this.onRaceChange?.();
+  }
+
+  cycleSpeed(): void {
+    this.setSpeed(SPEEDS[(SPEEDS.indexOf(this.speed) + 1) % SPEEDS.length]);
+  }
+
   setDebug(on: boolean): void {
     this.physics.setDebug(this.scene, on);
   }
@@ -348,6 +458,7 @@ export class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.composer?.setSize(window.innerWidth, window.innerHeight);
   }
 
   start(): void {
@@ -360,13 +471,15 @@ export class Game {
     this.lastTime = now;
 
     if (!this.paused) {
-      this.accumulator += dt * this.timeScale;
+      const rate = this.timeScale * this.speed;
+      const maxSteps = MAX_STEPS_PER_FRAME * Math.ceil(rate);
+      this.accumulator += dt * rate;
       let steps = 0;
-      while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
+      while (this.accumulator >= FIXED_DT && steps < maxSteps) {
         this.accumulator -= FIXED_DT;
         steps++;
       }
-      if (steps === MAX_STEPS_PER_FRAME) this.accumulator = 0;
+      if (steps === maxSteps) this.accumulator = 0;
       if (steps > 0) this.step(steps);
       else this.physics.syncMeshes();
     } else {
@@ -377,7 +490,12 @@ export class Game {
     this.updateFollow(dt);
     this.controls.update();
     this.beforeRender?.();
-    this.renderer.render(this.scene, this.camera);
+    if (this.tabletop && this.composer && this.bokeh) {
+      (this.bokeh.uniforms as Record<string, THREE.IUniform>).focus.value = this.camera.position.distanceTo(this.controls.target);
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
 
     this.frames++;
     this.fpsTimer += dt;

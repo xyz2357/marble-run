@@ -13,6 +13,8 @@ export function createPlayBar(editor: Editor, game: Game, root: HTMLElement): { 
     <button data-play="auto">连发<kbd>N</kbd></button>
     <button data-play="reset">重置<kbd>R</kbd></button>
     <button data-play="slow">慢动作<kbd>T</kbd></button>
+    <button data-play="speed" title="播放倍速：只是放得快，物理和机关的节奏不变">快放 ×1<kbd>X</kbd></button>
+    <button data-play="tabletop" title="桌面玩具的样子：白桌面、钢珠、低机位长焦、背景虚化、2 倍速">桌面<kbd>L</kbd></button>
     <button data-play="follow">跟随<kbd>C</kbd></button>
     <button data-play="pause">暂停<kbd>P</kbd></button>
     <button data-play="mute">音效<kbd>M</kbd></button>
@@ -56,6 +58,12 @@ export function createPlayBar(editor: Editor, game: Game, root: HTMLElement): { 
         case 'follow':
           game.setFollow(!game.follow);
           break;
+        case 'speed':
+          game.cycleSpeed();
+          break;
+        case 'tabletop':
+          game.setTabletop(!game.tabletop);
+          break;
         case 'pause':
           game.setPaused(!game.isPaused);
           refresh();
@@ -78,9 +86,14 @@ export function createPlayBar(editor: Editor, game: Game, root: HTMLElement): { 
     setActive('auto', game.autoSpawn);
     setActive('slow', game.timeScale !== 1);
     setActive('follow', game.follow);
+    setActive('speed', game.speed !== 1);
+    setActive('tabletop', game.tabletop);
     setActive('pause', game.isPaused);
     setActive('mute', !game.audio.muted);
     shapeSelect.value = game.marbleType;
+    const speedBtn = bar.querySelector('[data-play="speed"]')!;
+    speedBtn.textContent = '';
+    speedBtn.insertAdjacentHTML('beforeend', `快放 ×${game.speed}<kbd>X</kbd>`);
     bar.querySelector('[data-play="mute"]')!.textContent = '';
     bar.querySelector('[data-play="mute"]')!.insertAdjacentHTML('beforeend', `${game.audio.muted ? '静音' : '音效'}<kbd>M</kbd>`);
 

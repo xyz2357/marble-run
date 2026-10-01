@@ -170,7 +170,14 @@
     @media (pointer: coarse) and (min-width: 761px) {
       #race, #palette { top: calc(var(--toolbar-h, 43px) + 21px); }
       #variants { top: calc(var(--toolbar-h, 43px) + 17px); }
-      /* --playbar-h is 0px whenever the bar is down, so edit mode keeps its 12px. */
+      /* 11 buttons at the phone's 14px side padding came to 830px, wider than the 820px tablet. */
+      #playbar button { padding: 10px 11px; }
+    }
+
+    /* The HUD sits above the play bar on anything wider than a phone. Touch padding pushed the bar
+       into it first on tablets; with 11 controls (~880px) it reaches it on a 1280px desktop too.
+       --playbar-h is 0px whenever the bar is down, so edit mode keeps its 12px. */
+    @media (min-width: 761px) {
       #hud { bottom: calc(var(--playbar-h, 0px) + 12px); }
     }
 

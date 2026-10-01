@@ -88,6 +88,8 @@ export function createPanel(editor: Editor, game: Game): void {
             <dt><kbd>N</kbd></dt><dd>连发</dd>
             <dt><kbd>R</kbd></dt><dd>重置</dd>
             <dt><kbd>T</kbd></dt><dd>慢动作</dd>
+            <dt><kbd>X</kbd></dt><dd>快放 ×1 / ×2 / ×3 / ×4（物理不变，只是放得快）</dd>
+            <dt><kbd>L</kbd></dt><dd>桌面：白桌面、钢珠、低机位长焦、2 倍速</dd>
             <dt><kbd>C</kbd></dt><dd>相机跟随领先的弹珠</dd>
             <dt><kbd>P</kbd></dt><dd>暂停</dd>
             <dt><kbd>M</kbd></dt><dd>静音</dd>
