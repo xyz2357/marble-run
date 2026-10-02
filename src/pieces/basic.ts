@@ -94,7 +94,7 @@ export function slopeSteepDef(cells: number): PieceDef {
     build() {
       return {
         parts: [
-          { geometry: sweep(slopePath(v3(-0.5, cells * H, 0), v3(cells - 0.5, 0, 0)), 16 * cells), material: 'wood' },
+          { geometry: sweep(linePath(v3(-0.5, cells * H, 0), v3(cells - 0.5, 0, 0)), 16 * cells), material: 'wood' },
         ],
       };
     },
